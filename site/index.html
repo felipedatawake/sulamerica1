@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SP/SADT Sulamerica</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- LOGIN -->
+  <section id="tela-login" class="login hidden">
+    <div class="login-card">
+      <div class="brand"><span class="logo">✦</span> SP/SADT <b>Sulamerica</b></div>
+      <p class="muted">Acesso restrito à equipe da clínica.</p>
+      <form id="form-login">
+        <label>E-mail<input type="email" id="login-email" required autocomplete="username"></label>
+        <label>Senha<input type="password" id="login-senha" required minlength="8" autocomplete="current-password"></label>
+        <button class="btn primary" type="submit">Entrar</button>
+        <button class="btn ghost" type="button" id="btn-criar-conta">Criar minha senha (primeiro acesso)</button>
+      </form>
+      <p id="login-msg" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <section id="tela-app" class="hidden">
+    <header class="topbar">
+      <div class="brand"><span class="logo">✦</span> SP/SADT <b>Sulamerica</b></div>
+      <nav class="tabs">
+        <button data-tab="rodada" class="active">Rodada do dia</button>
+        <button data-tab="painel">Painel</button>
+        <button data-tab="pacientes">Pacientes</button>
+        <button data-tab="documentos">Documentos</button>
+        <button data-tab="config">Configurações</button>
+      </nav>
+      <div class="user"><span id="user-email"></span><button class="btn small ghost" id="btn-sair">Sair</button></div>
+    </header>
+
+    <main>
+      <!-- RODADA -->
+      <div class="tab" id="tab-rodada">
+        <div class="steps">
+          <div class="step-card">
+            <div class="n">1</div>
+            <h3>Planilha de pacientes</h3>
+            <p class="muted">Arquivo .xlsx ou .csv (no Google Planilhas: Arquivo → Fazer download → .xlsx).</p>
+            <label class="btn upload">Importar planilha<input type="file" id="in-planilha" accept=".xlsx,.xls,.csv" hidden></label>
+            <p class="stat" id="stat-pacientes">—</p>
+          </div>
+          <div class="step-card">
+            <div class="n">2</div>
+            <h3>Pedidos médicos</h3>
+            <p class="muted">Arquivos soltos ou a pasta inteira (com as subpastas de cada profissional). Liga ao paciente pelo nome do arquivo.</p>
+            <div class="btn-row">
+              <label class="btn upload">Arquivos<input type="file" id="in-pedidos" accept=".pdf,.jpg,.jpeg" multiple hidden></label>
+              <label class="btn upload">Pasta inteira<input type="file" id="in-pedidos-pasta" webkitdirectory directory multiple hidden></label>
+            </div>
+            <p class="stat" id="stat-pedidos">—</p>
+          </div>
+          <div class="step-card">
+            <div class="n">3</div>
+            <h3>Relatórios</h3>
+            <p class="muted">Arquivos soltos ou a pasta inteira (com as subpastas de cada profissional).</p>
+            <div class="btn-row">
+              <label class="btn upload">Arquivos<input type="file" id="in-relatorios" accept=".pdf,.jpg,.jpeg" multiple hidden></label>
+              <label class="btn upload">Pasta inteira<input type="file" id="in-relatorios-pasta" webkitdirectory directory multiple hidden></label>
+            </div>
+            <p class="stat" id="stat-relatorios">—</p>
+          </div>
+        </div>
+
+        <div class="dropzone" id="dropzone">
+          <b>Arraste pastas aqui</b>
+          <span class="muted">PEDIDO MEDICO, RELATORIOS ou a pasta SULAMERICA inteira. O sistema separa pedidos e relatórios pelo nome das pastas e ignora o que não for PDF/JPG.</span>
+          <label class="btn small">ou escolher pasta<input type="file" id="in-pasta-geral" webkitdirectory directory multiple hidden></label>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>4 · Quem é atendido hoje</h2>
+              <p class="muted">Marque os pacientes e informe a quantidade de sessões.</p>
+            </div>
+            <div class="head-actions">
+              <label class="inline">Data <input type="date" id="rodada-data"></label>
+              <label class="inline">Procedimento
+                <select id="rodada-proc">
+                  <option value="50000470|SESSAO DE PSICOTERAPIA INDIVIDUAL POR PSICOLOGO">50000470 · Psicoterapia individual</option>
+                  <option value="50001221|CONSULTA AMBULATORIAL EM PSICOLOGIA">50001221 · Consulta em psicologia</option>
+                </select>
+              </label>
+              <input type="search" id="busca-rodada" placeholder="Buscar paciente…">
+            </div>
+          </div>
+          <div class="table-wrap"><table id="tbl-rodada"><thead><tr>
+            <th><input type="checkbox" id="chk-todos" title="Marcar todos"></th><th>Paciente</th><th>Carteirinha</th><th>Médico / CRM</th><th>CID</th><th>Pedido</th><th>Relatório</th><th>Sessões</th>
+          </tr></thead><tbody></tbody></table></div>
+          <div class="footer-actions">
+            <span id="rodada-resumo" class="muted"></span>
+            <button class="btn primary" id="btn-criar-rodada" disabled>Criar rodada</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAINEL -->
+      <div class="tab hidden" id="tab-painel">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Rodadas</h2><p class="muted">Status de cada guia. "Feito por" separa o que o Claude (IA) fez do que uma pessoa fez.</p></div>
+            <div class="head-actions">
+              <select id="sel-rodada"></select>
+              <button class="btn small" id="btn-csv">Exportar CSV</button>
+            </div>
+          </div>
+          <div id="rodada-info" class="kpis"></div>
+          <div class="table-wrap"><table id="tbl-itens"><thead><tr>
+            <th>Paciente</th><th>Proc.</th><th>Qtde</th><th>Anexos</th><th>Status</th><th>Nº guia</th><th>Senha</th><th>Feito por</th><th>Aprovado por</th><th>Ações</th>
+          </tr></thead><tbody></tbody></table></div>
+          <div class="callout">
+            <b>Como executar a rodada:</b> envio automático pelo webservice TISS (quando configurado) com o botão <b>Enviar</b> de cada linha, ou pelo Claude:
+            diga <code id="cmd-claude">Rode a rodada …</code> na conversa com a skill SP/SADT Sulamerica.
+          </div>
+        </div>
+      </div>
+
+      <!-- PACIENTES -->
+      <div class="tab hidden" id="tab-pacientes">
+        <div class="card">
+          <div class="card-head"><div><h2>Pacientes</h2><p class="muted">Importados da planilha. Clique num campo para corrigir.</p></div>
+          <input type="search" id="busca-pac" placeholder="Buscar…"></div>
+          <div class="table-wrap"><table id="tbl-pac"><thead><tr>
+            <th>Paciente</th><th>Carteirinha</th><th>Médico</th><th>CRM</th><th>UF</th><th>CBO</th><th>CID</th><th>Aba</th><th>Ativo</th>
+          </tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- DOCUMENTOS -->
+      <div class="tab hidden" id="tab-documentos">
+        <div class="card">
+          <div class="card-head"><div><h2>Documentos</h2><p class="muted">Pedidos e relatórios na pasta privada. Ajuste o paciente se a ligação automática errou.</p></div>
+          <input type="search" id="busca-doc" placeholder="Buscar…"></div>
+          <div class="table-wrap"><table id="tbl-doc"><thead><tr>
+            <th>Arquivo</th><th>Tipo</th><th>Paciente</th><th>Tamanho</th><th>Enviado em</th><th>Por</th><th></th>
+          </tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- CONFIG -->
+      <div class="tab hidden" id="tab-config">
+        <div class="card narrow">
+          <h2>Dados do prestador</h2>
+          <form id="form-config" class="grid2">
+            <label>Código na operadora<input name="codigo_prestador"></label>
+            <label>CNES<input name="cnes"></label>
+            <label class="full">Nome do contratado<input name="nome_contratado"></label>
+            <label>Registro ANS da operadora<input name="registro_ans"></label>
+            <label>Versão TISS<input name="versao_tiss"></label>
+            <label>Procedimento padrão<input name="procedimento_padrao"></label>
+            <label>Caráter<select name="carater"><option>Eletivo</option><option>Urgência/Emergência</option></select></label>
+            <label>Técnica<select name="tecnica"><option>Convencional</option><option>Video</option><option>Robótica</option></select></label>
+            <div class="full"><button class="btn primary" type="submit">Salvar</button> <span id="config-msg" class="msg"></span></div>
+          </form>
+        </div>
+        <div class="card narrow">
+          <h2>Webservice TISS</h2>
+          <p id="tiss-status" class="muted">Verificando…</p>
+          <p class="muted">Endereço, login e senha do webservice ficam guardados como variáveis secretas no Netlify (TISS_URL, TISS_LOGIN, TISS_SENHA, TISS_SOAP_ACTION), nunca no navegador nem no banco.</p>
+        </div>
+        <div class="card narrow">
+          <h2>Equipe com acesso</h2>
+          <ul id="lista-membros" class="list"></ul>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- MODAL de ligação de arquivos -->
+  <dialog id="dlg-ligar">
+    <h2 id="dlg-titulo">Conferir arquivos</h2>
+    <p class="muted" id="dlg-resumo">Confira o paciente de cada arquivo antes de salvar.</p>
+    <div class="head-actions" style="margin-bottom:8px">
+      <label class="inline"><input type="checkbox" id="dlg-so-problemas"> Mostrar só os que precisam de atenção</label>
+    </div>
+    <div class="table-wrap"><table id="tbl-ligar"><thead><tr><th><input type="checkbox" id="dlg-todos" checked title="Incluir todos"></th><th>Arquivo</th><th>Pasta</th><th>Tipo</th><th>Paciente</th><th>Confiança</th></tr></thead><tbody></tbody></table></div>
+    <div class="footer-actions">
+      <button class="btn ghost" id="dlg-cancelar">Cancelar</button>
+      <button class="btn primary" id="dlg-salvar">Salvar arquivos</button>
+    </div>
+  </dialog>
+
+  <!-- MODAL de prévia da planilha -->
+  <dialog id="dlg-planilha">
+    <h2>Pacientes encontrados na planilha</h2>
+    <p class="muted" id="planilha-resumo"></p>
+    <div class="table-wrap"><table id="tbl-prev-pac"><thead><tr><th>Paciente</th><th>Carteirinha</th><th>Médico</th><th>CRM</th><th>CBO</th><th>CID</th><th>Aba</th></tr></thead><tbody></tbody></table></div>
+    <div class="footer-actions">
+      <button class="btn ghost" id="pl-cancelar">Cancelar</button>
+      <button class="btn primary" id="pl-salvar">Importar pacientes</button>
+    </div>
+  </dialog>
+
+  <div id="toast"></div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
