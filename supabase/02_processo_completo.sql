@@ -24,3 +24,7 @@ alter table public.sps_config add column if not exists tipo_atendimento text def
 alter table public.sps_rodada_itens drop constraint sps_rodada_itens_status_check;
 alter table public.sps_rodada_itens add constraint sps_rodada_itens_status_check check (status = any (array['pendente','preenchida','enviada','autorizada','parcial','em_analise','negada','nao_enviada','erro','cancelada']));
 alter table public.sps_rodada_itens add constraint sps_rodada_itens_qtde_aut_check check (qtde_autorizada is null or qtde_autorizada between 0 and 99);
+-- sps_07_sessoes_sem_horario (24/10/2026): horário removido (não é usado no portal nem exigido para psicoterapia)
+alter table public.sps_sessoes drop constraint if exists sps_sessoes_item_id_data_hora_inicio_key;
+alter table public.sps_sessoes drop column if exists hora_inicio, drop column if exists hora_fim;
+alter table public.sps_sessoes add constraint sps_sessoes_item_data_key unique (item_id, data);

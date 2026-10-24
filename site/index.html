@@ -256,7 +256,7 @@
       <li><b>Aprovar</b> [você] — o Claude abre este site e o portal da SulAmérica e manda a <b>tabela de conferência</b>. Responda "pode enviar todas" ou "todas menos a do fulano". Faça o <b>login no portal</b> quando ele pedir (ele nunca digita a senha).</li>
       <li><b>Envio</b> [Claude] — preenche, anexa pedido e relatório, valida e confirma cada guia aprovada. Se o portal mostrar algo diferente do aprovado, ele não confirma aquela guia. Tudo fica marcado como <span class="badge ia">Claude (IA)</span>.</li>
       <li><b>Acompanhar</b> [Claude + você] — aba <i>Acompanhamento</i>: guias em análise (botão <b>Verificar no Claude ↗</b> para reconsultar no portal), senhas vencendo, sessões esgotadas e negadas.</li>
-      <li><b>Registrar as sessões</b> [equipe] — botão <b>Sessões</b> da guia: data, horário e "paciente assinou" em cada atendimento. O sistema avisa sessão fora da validade da senha ou acima do autorizado.</li>
+      <li><b>Registrar as sessões</b> [equipe] — botão <b>Sessões</b> da guia: data e "paciente assinou" em cada atendimento. O sistema avisa sessão fora da validade da senha ou acima do autorizado.</li>
       <li><b>Faturar</b> [equipe] — <b>Exportar CSV</b> no Painel com guia, senha, validade e sessões feitas.</li>
     </ol>
     <h3>Antes da primeira rodada</h3>
@@ -278,13 +278,11 @@
     <p class="muted" id="ses-resumo"></p>
     <form id="form-sessao" class="head-actions" style="margin-bottom:10px">
       <label class="inline">Data <input type="date" name="data" required></label>
-      <label class="inline" title="Opcional: não vai para o portal da SulAmérica">Início <span class="muted">(opcional)</span> <input type="time" name="hora_inicio"></label>
-      <label class="inline" title="Opcional: não vai para o portal da SulAmérica">Fim <span class="muted">(opcional)</span> <input type="time" name="hora_fim"></label>
       <label class="inline"><input type="checkbox" name="assinada"> Paciente assinou</label>
       <button class="btn primary small" type="submit">Registrar sessão</button>
     </form>
-    <div class="table-wrap"><table id="tbl-sessoes"><thead><tr><th>#</th><th>Data</th><th>Horário</th><th>Assinada</th><th>Registrado por</th><th></th></tr></thead><tbody></tbody></table></div>
-    <div class="footer-actions"><span class="muted">Para faturar, cada sessão precisa da data e da assinatura do paciente (campos 56 e 57 da guia). O horário é opcional e serve só para o controle da clínica.</span><button class="btn" id="ses-fechar">Fechar</button></div>
+    <div class="table-wrap"><table id="tbl-sessoes"><thead><tr><th>#</th><th>Data</th><th>Assinada</th><th>Registrado por</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="footer-actions"><span class="muted">Para faturar, cada sessão precisa da data e da assinatura do paciente (campos 56 e 57 da guia). </span><button class="btn" id="ses-fechar">Fechar</button></div>
   </dialog>
 
   <!-- MODAL de prévia da planilha -->

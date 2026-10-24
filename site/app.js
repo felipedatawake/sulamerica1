@@ -763,8 +763,8 @@ async function carregarSessoes() {
   $('#ses-resumo').innerHTML = `Guia ${esc(it.numero_guia || '—')} · senha ${esc(it.senha || '—')}${it.senha_validade ? ` válida até ${dataBr(it.senha_validade)}` : ''} · <b>${lista.length}${aut != null ? ' de ' + aut : ''}</b> sessões registradas` +
     (aut != null && lista.length > aut ? ' · <b style="color:var(--bad)">acima do autorizado</b>' : '') +
     (lista.some((x) => !x.assinada) ? ` · <b style="color:var(--warn)">${lista.filter((x) => !x.assinada).length} sem assinatura</b>` : '');
-  $('#tbl-sessoes tbody').innerHTML = lista.map((x, n) => `<tr data-id="${x.id}"><td>${n + 1}</td><td>${dataBr(x.data)}</td><td>${(x.hora_inicio || '').slice(0, 5)}${x.hora_fim ? '–' + x.hora_fim.slice(0, 5) : ''}</td>
-    <td><input type="checkbox" data-ass ${x.assinada ? 'checked' : ''}></td><td class="muted">${esc(x.created_by || '')}</td><td><button class="btn small ghost" data-rm>Remover</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nenhuma sessão registrada.</td></tr>';
+  $('#tbl-sessoes tbody').innerHTML = lista.map((x, n) => `<tr data-id="${x.id}"><td>${n + 1}</td><td>${dataBr(x.data)}</td>
+    <td><input type="checkbox" data-ass ${x.assinada ? 'checked' : ''}></td><td class="muted">${esc(x.created_by || '')}</td><td><button class="btn small ghost" data-rm>Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nenhuma sessão registrada.</td></tr>';
   $$('#tbl-sessoes [data-ass]').forEach((c) => c.addEventListener('change', async () => {
     await comSessao(() => sb.from('sps_sessoes').update({ assinada: c.checked }).eq('id', c.closest('tr').dataset.id)); carregarSessoes();
   }));
@@ -779,10 +779,10 @@ $('#form-sessao').addEventListener('submit', async (e) => {
   if (!['autorizada', 'parcial'].includes(it.status) && !confirm('Esta guia ainda não está autorizada. Registrar a sessão mesmo assim?')) return;
   if (it.senha_validade && f.data.value > it.senha_validade && !confirm('A data é depois da validade da senha. Registrar mesmo assim?')) return;
   if (it.qtde_autorizada != null && it.sessoes_realizadas >= it.qtde_autorizada && !confirm('Todas as sessões autorizadas já foram registradas. Registrar uma a mais?')) return;
-  const { error } = await comSessao(() => sb.from('sps_sessoes').insert({ item_id: it.id, data: f.data.value, hora_inicio: f.hora_inicio.value || null, hora_fim: f.hora_fim.value || null, assinada: f.assinada.checked }));
-  if (error) return toast(error.message.includes('duplicate') ? 'Essa sessão já foi registrada.' : error.message, true);
+  const { error } = await comSessao(() => sb.from('sps_sessoes').insert({ item_id: it.id, data: f.data.value, assinada: f.assinada.checked }));
+  if (error) return toast(error.message.includes('duplicate') ? 'Já existe uma sessão registrada nessa data.' : error.message, true);
   await log('registrou_sessao', { item: it.id, data: f.data.value });
-  f.hora_inicio.value = ''; f.hora_fim.value = ''; f.assinada.checked = false;
+  f.assinada.checked = false;
   carregarSessoes();
 });
 $('#ses-fechar').addEventListener('click', () => { $('#dlg-sessoes').close(); recarregar().then(() => { if (!$('#tab-painel').classList.contains('hidden')) renderPainel(); }); });
