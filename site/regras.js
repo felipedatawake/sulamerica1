@@ -43,7 +43,8 @@ export function conferir({ pac, prof, pedido, relatorio, cfg = {}, outros = [], 
     const sug = sugereCid(pac.cid);
     erros.push(pac.cid ? `CID "${pac.cid}" fora do formato CID-10${sug ? ` (sugestão: ${sug})` : ''}` : 'Falta o CID');
   }
-  if (!(qtde >= 1)) erros.push('Quantidade de sessões precisa ser 1 ou mais');
+  if (!(qtde >= 1)) erros.push('Sessões = 0: informe de 1 a 99 para enviar');
+  else if (qtde > 99) erros.push('Sessões acima de 99');
 
   const anexo = (d, nome, obrig) => {
     if (!d) { (obrig ? erros : alertas).push(`Falta o ${nome}`); return; }

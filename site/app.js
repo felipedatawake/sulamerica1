@@ -531,12 +531,15 @@ function renderRodada() {
       <td>${esc(p.medico)}<br><span class="muted">CRM ${esc(p.crm)} ${esc(p.crm_uf)} · CBO ${esc(p.cbo)}</span></td>
       <td>${esc(p.cid)}</td><td>${marca(ped)}</td><td>${marca(rel)}</td>
       <td>${badgeConf(conferirPac(p, selecao.get(p.id) || 1))}</td>
-      <td><input type="number" min="1" max="99" value="${selecao.get(p.id) || 1}" data-qtde></td></tr>`;
+      <td><input type="number" min="1" max="99" step="1" value="${selecao.has(p.id) ? selecao.get(p.id) : 1}" data-qtde></td></tr>`;
   }).join('') || '<tr><td colspan="9" class="muted">Nenhum paciente. Comece importando a planilha (passo 1).</td></tr>';
   $$('#tbl-rodada tbody tr[data-id]').forEach((tr) => {
     const id = tr.dataset.id, chk = $('[data-sel]', tr), qt = $('[data-qtde]', tr);
-    chk.addEventListener('change', () => { chk.checked ? selecao.set(id, +qt.value || 1) : selecao.delete(id); resumoRodada(); });
-    qt.addEventListener('input', () => { if (chk.checked) selecao.set(id, +qt.value || 1); else { chk.checked = true; selecao.set(id, +qt.value || 1); } resumoRodada(); });
+    const valor = () => (qt.value === '' ? 0 : Math.trunc(+qt.value));
+    const marcaQt = () => qt.classList.toggle('qt-ruim', chk.checked && !(valor() >= 1 && valor() <= 99));
+    chk.addEventListener('change', () => { chk.checked ? selecao.set(id, valor()) : selecao.delete(id); marcaQt(); resumoRodada(); });
+    qt.addEventListener('input', () => { chk.checked = true; selecao.set(id, valor()); marcaQt(); resumoRodada(); });
+    marcaQt();
   });
   resumoRodada();
 }
@@ -548,14 +551,16 @@ function resumoRodada() {
   $('#rodada-resumo').innerHTML = ids.length ? `${ids.length} pacientes · ${sess} sessões` +
     (comErro ? ` · <b style="color:var(--bad)">${comErro} com erro (não serão enviados)</b>` : '') +
     (comAlerta ? ` · <b style="color:var(--warn)">${comAlerta} para conferir</b>` : '') : 'Nenhum paciente marcado.';
-  $('#btn-criar-rodada').disabled = !ids.length;
+  const qtRuim = [...selecao.values()].filter((q) => !(q >= 1 && q <= 99)).length;
+  if (qtRuim) $('#rodada-resumo').innerHTML += ` · <b style="color:var(--bad)">${qtRuim} com 0 sessões: corrija para criar a rodada</b>`;
+  $('#btn-criar-rodada').disabled = !ids.length || qtRuim > 0;
 }
 $('#busca-rodada').addEventListener('input', renderRodada);
 $('#rodada-so-ok').addEventListener('change', renderRodada);
 $('#chk-todos').addEventListener('change', (e) => {
   $$('#tbl-rodada tbody tr[data-id]').forEach((tr) => {
     $('[data-sel]', tr).checked = e.target.checked;
-    e.target.checked ? selecao.set(tr.dataset.id, +$('[data-qtde]', tr).value || 1) : selecao.delete(tr.dataset.id);
+    const q = $('[data-qtde]', tr).value; e.target.checked ? selecao.set(tr.dataset.id, q === '' ? 0 : Math.trunc(+q)) : selecao.delete(tr.dataset.id);
   });
   resumoRodada();
 });
@@ -563,7 +568,7 @@ $('#btn-criar-rodada').addEventListener('click', async () => {
   const [codigo, desc] = $('#rodada-proc').value.split('|');
   if (!$('#rodada-data').value) return toast('Informe a data do atendimento da rodada.', true);
   const qRuim = [...selecao.values()].filter((q) => !(q >= 1 && q <= 99)).length;
-  if (qRuim) return toast(`${qRuim} paciente(s) com quantidade de sessões inválida (use de 1 a 99).`, true);
+  if (qRuim) return toast(`${qRuim} paciente(s) com 0 ou quantidade inválida de sessões. Informe de 1 a 99 para criar a rodada.`, true);
   const confs = new Map([...selecao.entries()].map(([pid, q]) => [pid, conferirPac(state.pacientes.find((p) => p.id === pid), q)]));
   const comErro = [...confs.values()].filter((c) => !c.ok).length;
   if (comErro && !confirm(`${comErro} paciente(s) têm erro na conferência (dados ou anexos faltando). Eles entram na rodada como "não enviada", com o motivo. Continuar?`)) return;
