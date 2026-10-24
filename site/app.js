@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 import { norm, parseAbas, melhorPacienteComPasta, tipoPeloCaminho, classificaArquivo } from './parse.js';
+import { conferir, situacaoPosterior, normalizaCid } from './regras.js';
 
 const SUPABASE_URL = 'https://ypcunysgtzdgqamkygtz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Zl11bOWU5l3V7Nky3TNf-g_HBeFoNU8';
@@ -76,7 +77,7 @@ const hoje = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).t
 const kb = (n) => (n == null ? '' : n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB');
 const dt = (s) => (s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '');
 
-let state = { user: null, pacientes: [], docs: [], rodadas: [], config: null };
+let state = { user: null, pacientes: [], docs: [], rodadas: [], config: null, profissionais: [], itens: [] };
 
 function toast(msg, err = false) {
   const d = document.createElement('div');
@@ -181,18 +182,35 @@ async function entrar(user) {
 /* ---------------- DATA ---------------- */
 async function recarregar() {
   if (!(await garantirSessao())) return;
-  const [p, d, r, c] = await Promise.all([
+  const [p, d, r, c, pr, it] = await Promise.all([
     sb.from('sps_pacientes').select('*').order('nome'),
     sb.from('sps_documentos').select('*').order('created_at', { ascending: false }),
     sb.from('sps_rodadas').select('*').order('created_at', { ascending: false }).limit(50),
     sb.from('sps_config').select('*').eq('id', 1).maybeSingle(),
+    sb.from('sps_profissionais').select('*').order('aba'),
+    sb.from('sps_rodada_itens').select('*, sessoes:sps_sessoes(count)').neq('status', 'cancelada').order('updated_at', { ascending: false }).limit(5000),
   ]);
-  if ([p, d, r, c].some((x) => ehErroDeSessao(x.error))) { if (await garantirSessao(true)) return recarregar(); return; }
-  for (const x of [p, d, r, c]) if (x.error) toast(x.error.message, true);
+  const todos = [p, d, r, c, pr, it];
+  if (todos.some((x) => ehErroDeSessao(x.error))) { if (await garantirSessao(true)) return recarregar(); return; }
+  for (const x of todos) if (x.error) toast(x.error.message, true);
   state.pacientes = p.data || []; state.docs = d.data || []; state.rodadas = r.data || []; state.config = c.data;
-  renderStats(); renderRodada(); renderPacientes(); renderDocs(); renderSelRodada(); renderConfig();
+  state.profissionais = pr.data || [];
+  state.itens = (it.data || []).map((i) => ({ ...i, sessoes_realizadas: i.sessoes?.[0]?.count ?? 0 }));
+  renderStats(); renderRodada(); renderPacientes(); renderDocs(); renderSelRodada(); renderConfig(); renderAcomp();
 }
 function ultimoDoc(pid, tipo) { return state.docs.find((d) => d.paciente_id === pid && d.tipo === tipo); }
+const profDe = (p) => state.profissionais.find((x) => x.aba === p.aba_origem) || null;
+function conferirPac(p, qtde = 1, excetoItem = null) {
+  return conferir({ pac: p, prof: profDe(p), pedido: ultimoDoc(p.id, 'pedido'), relatorio: ultimoDoc(p.id, 'relatorio'), cfg: state.config || {},
+    outros: state.itens.filter((i) => i.paciente_id === p.id && i.id !== excetoItem), qtde, hoje: hoje() });
+}
+function badgeConf(c) {
+  const dica = esc([...c.erros.map((e) => '✖ ' + e), ...c.alertas.map((a) => '⚠ ' + a)].join('\n'));
+  if (c.erros.length) return `<span class="badge b-bad" title="${dica}">✖ ${c.erros.length} erro${c.erros.length > 1 ? 's' : ''}</span>`;
+  if (c.alertas.length) return `<span class="badge b-warn" title="${dica}">⚠ conferir (${c.alertas.length})</span>`;
+  return '<span class="badge b-ok">✓ ok</span>';
+}
+const listaConf = (c) => [...c.erros.map((e) => `<div class="cf-e">✖ ${esc(e)}</div>`), ...c.alertas.map((a) => `<div class="cf-a">⚠ ${esc(a)}</div>`)].join('');
 
 function renderStats() {
   $('#stat-pacientes').textContent = `${state.pacientes.filter((p) => p.ativo).length} pacientes cadastrados`;
@@ -206,6 +224,7 @@ $$('.tabs button').forEach((b) => b.addEventListener('click', () => {
   $$('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
   $$('.tab').forEach((t) => t.classList.toggle('hidden', t.id !== 'tab-' + b.dataset.tab));
   if (b.dataset.tab === 'painel') renderPainel();
+  if (b.dataset.tab === 'acomp') renderAcomp();
 }));
 
 /* ---------------- PLANILHA ---------------- */
@@ -432,8 +451,15 @@ function renderDocs() {
       <td><a href="#" onclick="abrirDoc('${d.id}');return false">${esc(d.arquivo_nome)}</a></td>
       <td><span class="badge ${d.tipo === 'pedido' ? 'b-info' : 'b-ok'}">${d.tipo}</span></td>
       <td><select data-doc="${d.id}">${opts(d.paciente_id)}</select></td>
+      <td><input type="date" data-emit="${d.id}" value="${d.data_documento || ''}" title="Data em que o ${d.tipo === 'pedido' ? 'médico emitiu o pedido' : 'relatório foi emitido'}"></td>
       <td>${kb(d.tamanho)}</td><td>${dt(d.created_at)}</td><td class="muted">${esc(d.created_by || '')}</td>
-      <td><button class="btn small ghost" data-del="${d.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nenhum documento ainda.</td></tr>';
+      <td><button class="btn small ghost" data-del="${d.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nenhum documento ainda.</td></tr>';
+  $$('#tbl-doc [data-emit]').forEach((inp) => inp.addEventListener('change', async () => {
+    const { error } = await comSessao(() => sb.from('sps_documentos').update({ data_documento: inp.value || null }).eq('id', inp.dataset.emit));
+    if (error) return toast(error.message, true);
+    const d = state.docs.find((x) => x.id === inp.dataset.emit); if (d) d.data_documento = inp.value || null;
+    toast('Data de emissão salva.'); renderRodada();
+  }));
   $$('#tbl-doc select').forEach((s) => s.addEventListener('change', async () => {
     const { error } = await sb.from('sps_documentos').update({ paciente_id: s.value || null }).eq('id', s.dataset.doc);
     if (error) toast(error.message, true); else { toast('Paciente do documento atualizado.'); recarregar(); }
@@ -455,19 +481,27 @@ $('#busca-doc').addEventListener('input', renderDocs);
 /* ---------------- PACIENTES ---------------- */
 function renderPacientes() {
   const q = norm($('#busca-pac').value);
-  const campos = ['nome', 'carteirinha', 'medico', 'crm', 'crm_uf', 'cbo', 'cid'];
-  $('#tbl-pac tbody').innerHTML = state.pacientes.filter((p) => !q || p.nome_norm.includes(q)).map((p) => `<tr data-id="${p.id}">
-    ${campos.map((c) => `<td contenteditable data-c="${c}">${esc(p[c])}</td>`).join('')}
+  const campos = ['nome', 'nome_social', 'carteirinha', 'medico', 'crm', 'crm_uf', 'cbo', 'cid'];
+  const soProb = $('#pac-so-prob').checked;
+  const linhas = state.pacientes.filter((p) => !q || p.nome_norm.includes(q)).map((p) => [p, conferirPac(p)]).filter(([, c]) => !soProb || !c.ok);
+  const ruim = (c, campo) => c.erros.some((e) => ({ carteirinha: /arteirinha/, medico: /médico solicitante$/, crm: /CRM/, crm_uf: /UF/, cbo: /CBO/, cid: /CID/ }[campo] || /^$/).test(e));
+  $('#tbl-pac tbody').innerHTML = linhas.slice(0, 600).map(([p, c]) => `<tr data-id="${p.id}">
+    ${campos.map((k) => `<td contenteditable data-c="${k}" class="${ruim(c, k) ? 'cel-ruim' : ''}">${esc(p[k])}</td>`).join('')}
     <td class="muted">${esc(p.aba_origem)}</td>
-    <td><input type="checkbox" data-ativo ${p.ativo ? 'checked' : ''}></td></tr>`).join('') || '<tr><td colspan="9" class="muted">Importe a planilha na aba Rodada do dia.</td></tr>';
+    <td>${badgeConf(c)}</td>
+    <td><input type="checkbox" data-ativo ${p.ativo ? 'checked' : ''}></td></tr>`).join('') || `<tr><td colspan="11" class="muted">${soProb ? 'Nenhum paciente com problema.' : 'Importe a planilha na aba Rodada do dia.'}</td></tr>`;
   $$('#tbl-pac td[contenteditable]').forEach((td) => td.addEventListener('blur', async () => {
     const id = td.parentElement.dataset.id, c = td.dataset.c, v = td.textContent.trim();
     const p = state.pacientes.find((x) => x.id === id);
     if (p[c] === v) return;
-    const upd = { [c]: c === 'carteirinha' ? v.replace(/\D/g, '') : v };
+    let val = v;
+    if (c === 'carteirinha' || c === 'crm' || c === 'cbo') val = v.replace(/\D/g, '');
+    if (c === 'crm_uf') val = v.toUpperCase();
+    if (c === 'cid') val = normalizaCid(v) || v.toUpperCase();
+    const upd = { [c]: val || (c === 'nome_social' ? null : val) };
     if (c === 'nome') upd.nome_norm = norm(v);
     const { error } = await sb.from('sps_pacientes').update(upd).eq('id', id);
-    if (error) toast(error.message, true); else { Object.assign(p, upd); toast('Salvo.'); }
+    if (error) toast(error.message, true); else { Object.assign(p, upd); toast('Salvo.'); renderPacientes(); renderRodada(); }
   }));
   $$('#tbl-pac [data-ativo]').forEach((ch) => ch.addEventListener('change', async () => {
     const id = ch.closest('tr').dataset.id;
@@ -476,12 +510,14 @@ function renderPacientes() {
   }));
 }
 $('#busca-pac').addEventListener('input', renderPacientes);
+$('#pac-so-prob').addEventListener('change', renderPacientes);
 
 /* ---------------- RODADA ---------------- */
 const selecao = new Map(); // paciente_id -> qtde
 function renderRodada() {
   const q = norm($('#busca-rodada').value);
-  const lista = state.pacientes.filter((p) => p.ativo && (!q || p.nome_norm.includes(q)));
+  const soOk = $('#rodada-so-ok').checked;
+  const lista = state.pacientes.filter((p) => p.ativo && (!q || p.nome_norm.includes(q))).filter((p) => !soOk || conferirPac(p).ok);
   const marca = (d) => (d ? `<a href="#" onclick="abrirDoc('${d.id}');return false" title="${esc(d.arquivo_nome)}"><span class="badge b-ok">✓ ver</span></a>` : '<span class="badge b-bad">falta</span>');
   $('#tbl-rodada tbody').innerHTML = lista.map((p) => {
     const ped = ultimoDoc(p.id, 'pedido'), rel = ultimoDoc(p.id, 'relatorio');
@@ -490,8 +526,9 @@ function renderRodada() {
       <td><b>${esc(p.nome)}</b></td><td class="muted">${esc(p.carteirinha)}</td>
       <td>${esc(p.medico)}<br><span class="muted">CRM ${esc(p.crm)} ${esc(p.crm_uf)} · CBO ${esc(p.cbo)}</span></td>
       <td>${esc(p.cid)}</td><td>${marca(ped)}</td><td>${marca(rel)}</td>
+      <td>${badgeConf(conferirPac(p, selecao.get(p.id) || 1))}</td>
       <td><input type="number" min="1" max="99" value="${selecao.get(p.id) || 1}" data-qtde></td></tr>`;
-  }).join('') || '<tr><td colspan="8" class="muted">Nenhum paciente. Comece importando a planilha (passo 1).</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="muted">Nenhum paciente. Comece importando a planilha (passo 1).</td></tr>';
   $$('#tbl-rodada tbody tr[data-id]').forEach((tr) => {
     const id = tr.dataset.id, chk = $('[data-sel]', tr), qt = $('[data-qtde]', tr);
     chk.addEventListener('change', () => { chk.checked ? selecao.set(id, +qt.value || 1) : selecao.delete(id); resumoRodada(); });
@@ -501,12 +538,16 @@ function renderRodada() {
 }
 function resumoRodada() {
   const ids = [...selecao.keys()];
-  const sem = ids.filter((id) => !ultimoDoc(id, 'pedido') || !ultimoDoc(id, 'relatorio')).length;
+  const confs = ids.map((id) => conferirPac(state.pacientes.find((p) => p.id === id), selecao.get(id)));
+  const comErro = confs.filter((c) => !c.ok).length, comAlerta = confs.filter((c) => c.ok && c.alertas.length).length;
   const sess = [...selecao.values()].reduce((a, b) => a + b, 0);
-  $('#rodada-resumo').innerHTML = ids.length ? `${ids.length} pacientes · ${sess} sessões${sem ? ` · <b style="color:var(--bad)">${sem} sem pedido ou relatório</b>` : ''}` : 'Nenhum paciente marcado.';
+  $('#rodada-resumo').innerHTML = ids.length ? `${ids.length} pacientes · ${sess} sessões` +
+    (comErro ? ` · <b style="color:var(--bad)">${comErro} com erro (não serão enviados)</b>` : '') +
+    (comAlerta ? ` · <b style="color:var(--warn)">${comAlerta} para conferir</b>` : '') : 'Nenhum paciente marcado.';
   $('#btn-criar-rodada').disabled = !ids.length;
 }
 $('#busca-rodada').addEventListener('input', renderRodada);
+$('#rodada-so-ok').addEventListener('change', renderRodada);
 $('#chk-todos').addEventListener('change', (e) => {
   $$('#tbl-rodada tbody tr[data-id]').forEach((tr) => {
     $('[data-sel]', tr).checked = e.target.checked;
@@ -516,14 +557,16 @@ $('#chk-todos').addEventListener('change', (e) => {
 });
 $('#btn-criar-rodada').addEventListener('click', async () => {
   const [codigo, desc] = $('#rodada-proc').value.split('|');
-  const sem = [...selecao.keys()].filter((id) => !ultimoDoc(id, 'pedido') || !ultimoDoc(id, 'relatorio'));
-  if (sem.length && !confirm(`${sem.length} paciente(s) estão sem pedido ou relatório. Eles entram na rodada como "não enviada". Continuar?`)) return;
+  const confs = new Map([...selecao.entries()].map(([pid, q]) => [pid, conferirPac(state.pacientes.find((p) => p.id === pid), q)]));
+  const comErro = [...confs.values()].filter((c) => !c.ok).length;
+  if (comErro && !confirm(`${comErro} paciente(s) têm erro na conferência (dados ou anexos faltando). Eles entram na rodada como "não enviada", com o motivo. Continuar?`)) return;
   const { data: rod, error } = await comSessao(() => sb.from('sps_rodadas').insert({ data: $('#rodada-data').value || hoje(), procedimento_codigo: codigo, procedimento_descricao: desc }).select().single());
   if (error) return toast(error.message, true);
   const itens = [...selecao.entries()].map(([pid, qtde]) => {
-    const ped = ultimoDoc(pid, 'pedido'), rel = ultimoDoc(pid, 'relatorio');
+    const ped = ultimoDoc(pid, 'pedido'), rel = ultimoDoc(pid, 'relatorio'), c = confs.get(pid);
     return { rodada_id: rod.id, paciente_id: pid, qtde, procedimento_codigo: codigo, pedido_id: ped?.id || null, relatorio_id: rel?.id || null,
-      status: ped && rel ? 'pendente' : 'nao_enviada', observacoes: ped && rel ? null : 'Falta ' + [!ped && 'pedido', !rel && 'relatório'].filter(Boolean).join(' e ') };
+      status: c.ok ? 'pendente' : 'nao_enviada', observacoes: c.ok ? null : c.erros.join('; '),
+      conferencia: { erros: c.erros, alertas: c.alertas, cid: c.cidNormalizado }, conferido_em: new Date().toISOString() };
   });
   const ins = await comSessao(() => sb.from('sps_rodada_itens').insert(itens));
   if (ins.error) return toast(ins.error.message, true);
@@ -536,7 +579,9 @@ $('#btn-criar-rodada').addEventListener('click', async () => {
 });
 
 /* ---------------- PAINEL ---------------- */
-const STATUS = { pendente: ['Pendente', 'b-info'], preenchida: ['Preenchida', 'b-warn'], enviada: ['Enviada', 'b-warn'], autorizada: ['Autorizada', 'b-ok'], em_analise: ['Em análise', 'b-warn'], negada: ['Negada', 'b-bad'], nao_enviada: ['Não enviada', 'b-bad'], erro: ['Erro', 'b-bad'] };
+const STATUS = { pendente: ['Pendente', 'b-info'], preenchida: ['Preenchida', 'b-warn'], enviada: ['Enviada', 'b-warn'], autorizada: ['Autorizada', 'b-ok'], parcial: ['Autorizada parcial', 'b-ok'], em_analise: ['Em análise', 'b-warn'], negada: ['Negada', 'b-bad'], nao_enviada: ['Não enviada', 'b-bad'], erro: ['Erro', 'b-bad'], cancelada: ['Cancelada', 'b-info'] };
+const dataBr = (d) => (d ? d.split('-').reverse().join('/') : '');
+const avisoHtml = (av) => av.map((a) => `<div class="av av-${a.nivel}">${esc(a.txt)}</div>`).join('');
 function renderSelRodada() {
   const atual = $('#sel-rodada').value;
   $('#sel-rodada').innerHTML = state.rodadas.map((r) => `<option value="${r.id}">${new Date(r.data + 'T12:00').toLocaleDateString('pt-BR')} · ${r.procedimento_codigo} · ${r.status}</option>`).join('') || '<option value="">Nenhuma rodada</option>';
@@ -553,10 +598,10 @@ async function funcaoServidorExiste() {
 async function statusTiss() { if (tissLigado === null) { try { tissLigado = !!(await (await fetch('/api/tiss')).json()).configurado; } catch { tissLigado = false; } } return tissLigado; }
 async function renderPainel() {
   const rid = $('#sel-rodada').value;
-  if (!rid) { $('#tbl-itens tbody').innerHTML = '<tr><td colspan="10" class="muted">Crie uma rodada na aba Rodada do dia.</td></tr>'; $('#rodada-info').innerHTML = ''; return; }
-  const { data, error } = await sb.from('sps_rodada_itens').select('*, paciente:sps_pacientes(*)').eq('rodada_id', rid);
+  if (!rid) { $('#tbl-itens tbody').innerHTML = '<tr><td colspan="13" class="muted">Crie uma rodada na aba Rodada do dia.</td></tr>'; $('#rodada-info').innerHTML = ''; return; }
+  const { data, error } = await sb.from('sps_rodada_itens').select('*, paciente:sps_pacientes(*), sessoes:sps_sessoes(count)').eq('rodada_id', rid);
   if (error) return toast(error.message, true);
-  itensAtuais = (data || []).sort((a, b) => a.paciente.nome.localeCompare(b.paciente.nome));
+  itensAtuais = (data || []).map((i) => ({ ...i, sessoes_realizadas: i.sessoes?.[0]?.count ?? 0 })).sort((a, b) => a.paciente.nome.localeCompare(b.paciente.nome));
   const ligado = await statusTiss();
   const cont = (s) => itensAtuais.filter((i) => i.status === s).length;
   const ia = itensAtuais.filter((i) => i.feito_por === 'Claude (IA)').length;
@@ -570,16 +615,19 @@ async function renderPainel() {
   $('#tbl-itens tbody').innerHTML = itensAtuais.map((i) => {
     const [rot, cls] = STATUS[i.status] || [i.status, 'b-info'];
     return `<tr data-id="${i.id}">
-      <td><b>${esc(i.paciente.nome)}</b><br><span class="muted">${esc(i.paciente.carteirinha)}</span>${i.observacoes ? `<br><span class="muted">${esc(i.observacoes)}</span>` : ''}</td>
+      <td><b>${esc(i.paciente.nome)}</b><br><span class="muted">${esc(i.paciente.carteirinha)}</span>${i.observacoes ? `<br><span class="muted">${esc(i.observacoes)}</span>` : ''}${i.conferencia?.alertas?.length && i.status === 'pendente' ? `<div class="cf-a" title="${esc(i.conferencia.alertas.join('\n'))}">⚠ ${i.conferencia.alertas.length} ponto(s) para conferir</div>` : ''}${avisoHtml(situacaoPosterior(i, hoje(), state.config || {}))}</td>
       <td>${esc(i.procedimento_codigo)}</td><td>${i.qtde}</td>
+      <td contenteditable data-c="qtde_autorizada" data-num>${i.qtde_autorizada ?? ''}</td>
       <td>${[doc(i.pedido_id), doc(i.relatorio_id)].filter(Boolean).join(' · ') || '<span class="badge b-bad">sem anexos</span>'}</td>
       <td><select data-status>${Object.entries(STATUS).map(([k, [r]]) => `<option value="${k}" ${k === i.status ? 'selected' : ''}>${r}</option>`).join('')}</select> <span class="badge ${cls}">${rot}</span></td>
       <td contenteditable data-c="numero_guia">${esc(i.numero_guia)}</td>
       <td contenteditable data-c="senha">${esc(i.senha)}</td>
+      <td><input type="date" data-validade value="${i.senha_validade || ''}"></td>
+      <td><button class="btn small" data-sessoes>${i.sessoes_realizadas}${i.qtde_autorizada != null ? ' / ' + i.qtde_autorizada : ''}</button></td>
       <td>${i.feito_por ? `<span class="badge ${i.feito_por === 'Claude (IA)' ? 'ia' : 'b-info'}">${esc(i.feito_por)}</span>` : ''}</td>
       <td class="muted">${esc(i.aprovado_por || '')}</td>
       <td><button class="btn small" data-xml>XML</button> <button class="btn small primary" data-enviar ${i.status === 'pendente' ? '' : 'disabled'}>${ligado ? 'Enviar' : 'Enviar pelo Claude'}</button></td></tr>`;
-  }).join('') || '<tr><td colspan="10" class="muted">Rodada vazia.</td></tr>';
+  }).join('') || '<tr><td colspan="13" class="muted">Rodada vazia.</td></tr>';
 
   $$('#tbl-itens tr[data-id]').forEach((tr) => {
     const id = tr.dataset.id;
@@ -589,9 +637,16 @@ async function renderPainel() {
       if (error) toast(error.message, true); else { await log('alterou_status', { item: id, status: e.target.value }); renderPainel(); }
     });
     $$('[contenteditable]', tr).forEach((td) => td.addEventListener('blur', async () => {
-      const { error } = await sb.from('sps_rodada_itens').update({ [td.dataset.c]: td.textContent.trim() || null, ...marcarHumano }).eq('id', id);
+      let v = td.textContent.trim() || null;
+      if (td.hasAttribute('data-num') && v != null) { v = parseInt(v.replace(/\D/g, ''), 10); if (Number.isNaN(v)) v = null; }
+      const { error } = await sb.from('sps_rodada_itens').update({ [td.dataset.c]: v, ...marcarHumano }).eq('id', id);
       if (error) toast(error.message, true);
     }));
+    $('[data-validade]', tr).addEventListener('change', async (e) => {
+      const { error } = await sb.from('sps_rodada_itens').update({ senha_validade: e.target.value || null, ...marcarHumano }).eq('id', id);
+      if (error) toast(error.message, true); else toast('Validade salva.');
+    });
+    $('[data-sessoes]', tr).addEventListener('click', () => abrirSessoes(itensAtuais.find((x) => x.id === id)));
     $('[data-xml]', tr).addEventListener('click', () => chamarTiss(id, true));
     $('[data-enviar]', tr).addEventListener('click', async () => {
       const it = itensAtuais.find((x) => x.id === id);
@@ -629,17 +684,107 @@ async function chamarTiss(itemId, somenteXml) {
   renderPainel();
 }
 $('#btn-csv').addEventListener('click', () => {
-  const cab = ['Paciente', 'Carteirinha', 'Procedimento', 'Qtde', 'Status', 'Nº guia', 'Senha', 'Feito por', 'Aprovado por', 'Observações'];
-  const linhas = itensAtuais.map((i) => [i.paciente.nome, i.paciente.carteirinha, i.procedimento_codigo, i.qtde, STATUS[i.status]?.[0] || i.status, i.numero_guia, i.senha, i.feito_por, i.aprovado_por, i.observacoes]);
+  const cab = ['Paciente', 'Carteirinha', 'Médico', 'CRM', 'CBO', 'CID', 'Procedimento', 'Qtde solicitada', 'Qtde autorizada', 'Status', 'Nº guia', 'Senha', 'Validade senha', 'Sessões feitas', 'Feito por', 'Aprovado por', 'Observações'];
+  const linhas = itensAtuais.map((i) => [i.paciente.nome, i.paciente.carteirinha, i.paciente.medico, i.paciente.crm, i.paciente.cbo, i.paciente.cid, i.procedimento_codigo, i.qtde, i.qtde_autorizada, STATUS[i.status]?.[0] || i.status, i.numero_guia, i.senha, dataBr(i.senha_validade), i.sessoes_realizadas, i.feito_por, i.aprovado_por, i.observacoes]);
   const csv = [cab, ...linhas].map((l) => l.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: `rodada-${$('#sel-rodada').value.slice(0, 8)}.csv` });
   a.click();
 });
 
+/* ---------------- SESSÕES REALIZADAS ---------------- */
+let itemSessoes = null;
+async function abrirSessoes(item) {
+  itemSessoes = item;
+  $('#ses-titulo').textContent = `Sessões · ${item.paciente?.nome || state.pacientes.find((p) => p.id === item.paciente_id)?.nome || ''}`;
+  $('#form-sessao').reset(); $('#form-sessao').elements.data.value = hoje();
+  await carregarSessoes();
+  $('#dlg-sessoes').showModal();
+}
+async function carregarSessoes() {
+  const it = itemSessoes;
+  const { data, error } = await comSessao(() => sb.from('sps_sessoes').select('*').eq('item_id', it.id).order('data'));
+  if (error) return toast(error.message, true);
+  const lista = data || [];
+  it.sessoes_realizadas = lista.length;
+  const aut = it.qtde_autorizada;
+  $('#ses-resumo').innerHTML = `Guia ${esc(it.numero_guia || '—')} · senha ${esc(it.senha || '—')}${it.senha_validade ? ` válida até ${dataBr(it.senha_validade)}` : ''} · <b>${lista.length}${aut != null ? ' de ' + aut : ''}</b> sessões registradas` +
+    (aut != null && lista.length > aut ? ' · <b style="color:var(--bad)">acima do autorizado</b>' : '') +
+    (lista.some((x) => !x.assinada) ? ` · <b style="color:var(--warn)">${lista.filter((x) => !x.assinada).length} sem assinatura</b>` : '');
+  $('#tbl-sessoes tbody').innerHTML = lista.map((x, n) => `<tr data-id="${x.id}"><td>${n + 1}</td><td>${dataBr(x.data)}</td><td>${(x.hora_inicio || '').slice(0, 5)}${x.hora_fim ? '–' + x.hora_fim.slice(0, 5) : ''}</td>
+    <td><input type="checkbox" data-ass ${x.assinada ? 'checked' : ''}></td><td class="muted">${esc(x.created_by || '')}</td><td><button class="btn small ghost" data-rm>Remover</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nenhuma sessão registrada.</td></tr>';
+  $$('#tbl-sessoes [data-ass]').forEach((c) => c.addEventListener('change', async () => {
+    await comSessao(() => sb.from('sps_sessoes').update({ assinada: c.checked }).eq('id', c.closest('tr').dataset.id)); carregarSessoes();
+  }));
+  $$('#tbl-sessoes [data-rm]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Remover esta sessão?')) return;
+    await comSessao(() => sb.from('sps_sessoes').delete().eq('id', b.closest('tr').dataset.id)); carregarSessoes();
+  }));
+}
+$('#form-sessao').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target.elements, it = itemSessoes;
+  if (!['autorizada', 'parcial'].includes(it.status) && !confirm('Esta guia ainda não está autorizada. Registrar a sessão mesmo assim?')) return;
+  if (it.senha_validade && f.data.value > it.senha_validade && !confirm('A data é depois da validade da senha. Registrar mesmo assim?')) return;
+  if (it.qtde_autorizada != null && it.sessoes_realizadas >= it.qtde_autorizada && !confirm('Todas as sessões autorizadas já foram registradas. Registrar uma a mais?')) return;
+  const { error } = await comSessao(() => sb.from('sps_sessoes').insert({ item_id: it.id, data: f.data.value, hora_inicio: f.hora_inicio.value || null, hora_fim: f.hora_fim.value || null, assinada: f.assinada.checked }));
+  if (error) return toast(error.message.includes('duplicate') ? 'Essa sessão já foi registrada.' : error.message, true);
+  await log('registrou_sessao', { item: it.id, data: f.data.value });
+  f.hora_inicio.value = ''; f.hora_fim.value = ''; f.assinada.checked = false;
+  carregarSessoes();
+});
+$('#ses-fechar').addEventListener('click', () => { $('#dlg-sessoes').close(); recarregar().then(() => { if (!$('#tab-painel').classList.contains('hidden')) renderPainel(); }); });
+
+/* ---------------- ACOMPANHAMENTO (validação posterior) ---------------- */
+function renderAcomp() {
+  if (!state.user) return;
+  const pac = Object.fromEntries(state.pacientes.map((p) => [p.id, p]));
+  const rod = Object.fromEntries(state.rodadas.map((r) => [r.id, r]));
+  const soAvisos = $('#acomp-so-avisos').checked;
+  const linhas = state.itens.filter((i) => ['autorizada', 'parcial', 'em_analise', 'negada'].includes(i.status))
+    .map((i) => [i, situacaoPosterior(i, hoje(), state.config || {})])
+    .filter(([, av]) => !soAvisos || av.some((a) => a.nivel !== 'info'))
+    .sort((a, b) => (b[1].some((x) => x.nivel === 'bad') - a[1].some((x) => x.nivel === 'bad')) || (pac[a[0].paciente_id]?.nome || '').localeCompare(pac[b[0].paciente_id]?.nome || ''));
+  const n = (s) => state.itens.filter((i) => i.status === s).length;
+  const vencendo = state.itens.filter((i) => i.status === 'autorizada' && i.senha_validade && i.senha_validade >= hoje() && (new Date(i.senha_validade) - new Date(hoje())) / 864e5 <= 7).length;
+  $('#acomp-kpis').innerHTML = `<div class="kpi"><b>${n('em_analise')}</b><span class="muted">em análise</span></div>
+    <div class="kpi"><b>${n('autorizada') + n('parcial')}</b><span class="muted">autorizadas</span></div>
+    <div class="kpi"><b>${vencendo}</b><span class="muted">senhas vencendo (7 dias)</span></div>
+    <div class="kpi"><b>${n('negada')}</b><span class="muted">negadas</span></div>`;
+  $('#cmd-acomp').textContent = `Verifique as guias em análise da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${location.origin})`;
+  $('#tbl-acomp tbody').innerHTML = linhas.slice(0, 500).map(([i, av]) => {
+    const [rot, cls] = STATUS[i.status] || [i.status, 'b-info'];
+    const p = pac[i.paciente_id] || {};
+    return `<tr data-id="${i.id}"><td><b>${esc(p.nome || '')}</b><br><span class="muted">${esc(p.carteirinha || '')}</span></td>
+      <td class="muted">${rod[i.rodada_id] ? dataBr(rod[i.rodada_id].data) : ''}</td>
+      <td><span class="badge ${cls}">${rot}</span></td>
+      <td>${esc(i.numero_guia || '—')}<br><span class="muted">${esc(i.senha || '')}</span></td>
+      <td>${dataBr(i.senha_validade) || '<span class="muted">—</span>'}</td>
+      <td>${i.sessoes_realizadas}${i.qtde_autorizada != null ? ' / ' + i.qtde_autorizada : ''}</td>
+      <td>${avisoHtml(av) || '<span class="muted">ok</span>'}</td>
+      <td><button class="btn small" data-ses>Sessões</button></td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="muted">Nada pendente.</td></tr>';
+  $$('#tbl-acomp [data-ses]').forEach((b) => b.addEventListener('click', () => abrirSessoes(state.itens.find((x) => x.id === b.closest('tr').dataset.id))));
+}
+$('#acomp-so-avisos').addEventListener('change', renderAcomp);
+
 /* ---------------- CONFIG ---------------- */
 async function renderConfig() {
   const f = $('#form-config');
-  if (state.config) for (const [k, v] of Object.entries(state.config)) if (f.elements[k]) f.elements[k].value = v ?? '';
+  if (state.config) for (const [k, v] of Object.entries(state.config)) if (f.elements[k]) f.elements[k].value = v == null ? '' : String(v);
+  const nPac = (aba) => state.pacientes.filter((p) => p.ativo && p.aba_origem === aba).length;
+  $('#tbl-prof tbody').innerHTML = state.profissionais.map((x) => `<tr data-id="${x.id}"><td><b>${esc(x.aba)}</b></td>
+    <td contenteditable data-c="nome">${esc(x.nome)}</td><td>CRP (09)</td>
+    <td contenteditable data-c="numero_conselho" class="${x.numero_conselho ? '' : 'cel-ruim'}">${esc(x.numero_conselho)}</td>
+    <td contenteditable data-c="uf">${esc(x.uf)}</td><td contenteditable data-c="cbo">${esc(x.cbo)}</td><td>${nPac(x.aba)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Importe a planilha primeiro.</td></tr>';
+  $$('#tbl-prof [contenteditable]').forEach((td) => td.addEventListener('blur', async () => {
+    const id = td.parentElement.dataset.id, c = td.dataset.c; let v = td.textContent.trim();
+    if (c === 'uf') v = v.toUpperCase(); if (c === 'cbo') v = v.replace(/\D/g, '');
+    const x = state.profissionais.find((y) => y.id === id);
+    if ((x[c] ?? '') === v) return;
+    const { error } = await comSessao(() => sb.from('sps_profissionais').update({ [c]: v || null }).eq('id', id));
+    if (error) return toast(error.message, true);
+    x[c] = v || null; td.classList.toggle('cel-ruim', c === 'numero_conselho' && !v); toast('Salvo.');
+  }));
   const m = await sb.from('sps_membros').select('email,nome,papel').order('email');
   $('#lista-membros').innerHTML = (m.data || []).map((x) => `<li>${esc(x.nome || '')} &lt;${esc(x.email)}&gt; · ${esc(x.papel)}</li>`).join('');
   try {
@@ -652,10 +797,12 @@ async function renderConfig() {
 $('#form-config').addEventListener('submit', async (e) => {
   e.preventDefault();
   const dados = Object.fromEntries(new FormData(e.target));
+  for (const k of ['validade_pedido_dias', 'validade_senha_dias', 'dias_reverificar']) dados[k] = dados[k] ? +dados[k] : null;
+  dados.exigir_relatorio = dados.exigir_relatorio !== 'false';
   const { error } = await sb.from('sps_config').update(dados).eq('id', 1);
   $('#config-msg').className = 'msg ' + (error ? 'err' : 'ok');
   $('#config-msg').textContent = error ? error.message : 'Salvo.';
-  if (!error) log('alterou_config', dados);
+  if (!error) { log('alterou_config', dados); state.config = { ...state.config, ...dados }; renderRodada(); }
 });
 
 // Atalho usado pelo Claude (skill) para baixar anexos com link temporário, usando a sessão de quem está logado

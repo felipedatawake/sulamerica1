@@ -33,6 +33,7 @@
       <nav class="tabs">
         <button data-tab="rodada" class="active">Rodada do dia</button>
         <button data-tab="painel">Painel</button>
+        <button data-tab="acomp">Acompanhamento</button>
         <button data-tab="pacientes">Pacientes</button>
         <button data-tab="documentos">Documentos</button>
         <button data-tab="config">Configurações</button>
@@ -93,11 +94,12 @@
                   <option value="50001221|CONSULTA AMBULATORIAL EM PSICOLOGIA">50001221 · Consulta em psicologia</option>
                 </select>
               </label>
+              <label class="inline"><input type="checkbox" id="rodada-so-ok"> Só prontos para enviar</label>
               <input type="search" id="busca-rodada" placeholder="Buscar paciente…">
             </div>
           </div>
           <div class="table-wrap"><table id="tbl-rodada"><thead><tr>
-            <th><input type="checkbox" id="chk-todos" title="Marcar todos"></th><th>Paciente</th><th>Carteirinha</th><th>Médico / CRM</th><th>CID</th><th>Pedido</th><th>Relatório</th><th>Sessões</th>
+            <th><input type="checkbox" id="chk-todos" title="Marcar todos"></th><th>Paciente</th><th>Carteirinha</th><th>Médico / CRM</th><th>CID</th><th>Pedido</th><th>Relatório</th><th>Conferência</th><th>Sessões</th>
           </tr></thead><tbody></tbody></table></div>
           <div class="footer-actions">
             <span id="rodada-resumo" class="muted"></span>
@@ -118,7 +120,7 @@
           </div>
           <div id="rodada-info" class="kpis"></div>
           <div class="table-wrap"><table id="tbl-itens"><thead><tr>
-            <th>Paciente</th><th>Proc.</th><th>Qtde</th><th>Anexos</th><th>Status</th><th>Nº guia</th><th>Senha</th><th>Feito por</th><th>Aprovado por</th><th>Ações</th>
+            <th>Paciente</th><th>Proc.</th><th>Pedidas</th><th>Autoriz.</th><th>Anexos</th><th>Status</th><th>Nº guia</th><th>Senha</th><th>Validade senha</th><th>Sessões feitas</th><th>Feito por</th><th>Aprovado por</th><th>Ações</th>
           </tr></thead><tbody></tbody></table></div>
           <div class="callout">
             <b>Como executar a rodada:</b> envio automático pelo webservice TISS (quando configurado) com o botão <b>Enviar</b> de cada linha, ou pelo Claude:
@@ -127,13 +129,30 @@
         </div>
       </div>
 
+      <!-- ACOMPANHAMENTO -->
+      <div class="tab hidden" id="tab-acomp">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Acompanhamento das guias</h2><p class="muted">Validação posterior: guias em análise para reconsultar, senhas vencendo, saldo de sessões e negadas.</p></div>
+            <div class="head-actions">
+              <label class="inline"><input type="checkbox" id="acomp-so-avisos" checked> Só o que precisa de ação</label>
+            </div>
+          </div>
+          <div id="acomp-kpis" class="kpis"></div>
+          <div class="table-wrap"><table id="tbl-acomp"><thead><tr>
+            <th>Paciente</th><th>Rodada</th><th>Status</th><th>Nº guia / senha</th><th>Validade</th><th>Sessões</th><th>O que fazer</th><th></th>
+          </tr></thead><tbody></tbody></table></div>
+          <div class="callout"><b>Reconsultar no portal pelo Claude:</b> diga <code id="cmd-acomp">Verifique as guias em análise…</code> na conversa com a skill SP/SADT Sulamerica. Ele consulta cada guia no portal e atualiza status, senha, validade e quantidade autorizada.</div>
+        </div>
+      </div>
+
       <!-- PACIENTES -->
       <div class="tab hidden" id="tab-pacientes">
         <div class="card">
           <div class="card-head"><div><h2>Pacientes</h2><p class="muted">Importados da planilha. Clique num campo para corrigir.</p></div>
-          <input type="search" id="busca-pac" placeholder="Buscar…"></div>
+          <div class="head-actions"><label class="inline"><input type="checkbox" id="pac-so-prob"> Só com problema</label><input type="search" id="busca-pac" placeholder="Buscar…"></div></div>
           <div class="table-wrap"><table id="tbl-pac"><thead><tr>
-            <th>Paciente</th><th>Carteirinha</th><th>Médico</th><th>CRM</th><th>UF</th><th>CBO</th><th>CID</th><th>Aba</th><th>Ativo</th>
+            <th>Paciente</th><th>Nome social</th><th>Carteirinha</th><th>Médico</th><th>CRM</th><th>UF</th><th>CBO</th><th>CID</th><th>Aba</th><th>Conferência</th><th>Ativo</th>
           </tr></thead><tbody></tbody></table></div>
         </div>
       </div>
@@ -144,7 +163,7 @@
           <div class="card-head"><div><h2>Documentos</h2><p class="muted">Pedidos e relatórios na pasta privada. Ajuste o paciente se a ligação automática errou.</p></div>
           <input type="search" id="busca-doc" placeholder="Buscar…"></div>
           <div class="table-wrap"><table id="tbl-doc"><thead><tr>
-            <th>Arquivo</th><th>Tipo</th><th>Paciente</th><th>Tamanho</th><th>Enviado em</th><th>Por</th><th></th>
+            <th>Arquivo</th><th>Tipo</th><th>Paciente</th><th>Emitido em</th><th>Tamanho</th><th>Enviado em</th><th>Por</th><th></th>
           </tr></thead><tbody></tbody></table></div>
         </div>
       </div>
@@ -162,8 +181,20 @@
             <label>Procedimento padrão<input name="procedimento_padrao"></label>
             <label>Caráter<select name="carater"><option>Eletivo</option><option>Urgência/Emergência</option></select></label>
             <label>Técnica<select name="tecnica"><option>Convencional</option><option>Video</option><option>Robótica</option></select></label>
+            <label>Tipo de atendimento (TISS 50)<select name="tipo_atendimento"><option value="03">03 · Outras terapias</option><option value="04">04 · Consulta</option></select></label>
+            <label>Regime de atendimento (TISS 76)<select name="regime_atendimento"><option value="01">01 · Ambulatorial</option></select></label>
+            <label>Indicação de acidente (TISS 36)<select name="indicacao_acidente"><option value="9">9 · Não acidente</option><option value="0">0 · Trabalho</option><option value="1">1 · Trânsito</option><option value="2">2 · Outros</option></select></label>
+            <label>Validade do pedido médico (dias)<input name="validade_pedido_dias" type="number" min="1"></label>
+            <label>Validade padrão da senha (dias)<input name="validade_senha_dias" type="number" min="1"></label>
+            <label>Reconsultar "em análise" após (dias)<input name="dias_reverificar" type="number" min="1"></label>
+            <label>Relatório obrigatório<select name="exigir_relatorio"><option value="true">Sim</option><option value="false">Não</option></select></label>
             <div class="full"><button class="btn primary" type="submit">Salvar</button> <span id="config-msg" class="msg"></span></div>
           </form>
+        </div>
+        <div class="card">
+          <h2>Psicólogos executantes</h2>
+          <p class="muted">Um por aba da planilha. O CRP é exigido na execução e no faturamento da guia (campos 50–55 da SP/SADT). Clique para editar.</p>
+          <div class="table-wrap"><table id="tbl-prof"><thead><tr><th>Aba</th><th>Nome completo</th><th>Conselho</th><th>Nº CRP</th><th>UF</th><th>CBO</th><th>Pacientes</th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="card narrow">
           <h2>Webservice TISS</h2>
@@ -190,6 +221,21 @@
       <button class="btn ghost" id="dlg-cancelar">Cancelar</button>
       <button class="btn primary" id="dlg-salvar">Salvar arquivos</button>
     </div>
+  </dialog>
+
+  <!-- MODAL de sessões realizadas -->
+  <dialog id="dlg-sessoes">
+    <h2 id="ses-titulo">Sessões realizadas</h2>
+    <p class="muted" id="ses-resumo"></p>
+    <form id="form-sessao" class="head-actions" style="margin-bottom:10px">
+      <label class="inline">Data <input type="date" name="data" required></label>
+      <label class="inline">Início <input type="time" name="hora_inicio"></label>
+      <label class="inline">Fim <input type="time" name="hora_fim"></label>
+      <label class="inline"><input type="checkbox" name="assinada"> Paciente assinou</label>
+      <button class="btn primary small" type="submit">Registrar sessão</button>
+    </form>
+    <div class="table-wrap"><table id="tbl-sessoes"><thead><tr><th>#</th><th>Data</th><th>Horário</th><th>Assinada</th><th>Registrado por</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="footer-actions"><span class="muted">Cada sessão precisa da assinatura do paciente (campo 57 da guia) para faturar.</span><button class="btn" id="ses-fechar">Fechar</button></div>
   </dialog>
 
   <!-- MODAL de prévia da planilha -->

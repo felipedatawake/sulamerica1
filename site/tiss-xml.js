@@ -1,5 +1,6 @@
 // Geração do XML TISS da solicitação SP/SADT no navegador (usado quando a função de servidor não está disponível)
 import md5 from 'https://cdn.jsdelivr.net/npm/js-md5@0.8.3/+esm';
+import { normalizaCid } from './regras.js';
 
 const NS = 'http://www.ans.gov.br/padroes/tiss/schemas';
 const x = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -19,7 +20,7 @@ export function xmlSolicitacao({ item, pac, rod, cfg }) {
   const agora = new Date(Date.now() - 3 * 3600e3);
   const data = agora.toISOString().slice(0, 10), hora = agora.toISOString().slice(11, 19);
   const carater = /urg/i.test(cfg.carater || '') ? '2' : '1';
-  const cid = (pac.cid || '').split('/')[0].trim();
+  const cid = normalizaCid((pac.cid || '').split('/')[0]) || '';
   const cabecalho = [
     el('identificacaoTransacao', [el('tipoTransacao', 'SOLICITACAO_PROCEDIMENTOS'), el('sequencialTransacao', String(Date.now()).slice(-12)), el('dataRegistroTransacao', data), el('horaRegistroTransacao', hora)]),
     el('origem', [el('identificacaoPrestador', [el('codigoPrestadorNaOperadora', cfg.codigo_prestador)])]),
