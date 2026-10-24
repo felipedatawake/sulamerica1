@@ -610,7 +610,12 @@ async function renderPainel() {
     <div class="kpi"><b>${cont('autorizada')}</b><span class="muted">autorizadas</span></div>
     <div class="kpi"><b>${cont('nao_enviada') + cont('erro') + cont('negada')}</b><span class="muted">com problema</span></div>
     <div class="kpi"><b>${ia}</b><span class="muted">feitas pelo Claude</span></div>`;
-  $('#cmd-claude').textContent = `Rode a rodada ${rid} da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${location.origin})`;
+  const prontos = itensAtuais.filter((i) => i.status === 'pendente').length;
+  definirComando('#cmd-claude', '#btn-exec-claude',
+    `Use a skill SP/SADT Sulamerica. Rode a rodada ${rid} da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${siteUrl()}). ` +
+    `Primeiro me mande a tabela de conferência das ${prontos} guia(s) pendente(s) e espere minha aprovação antes de validar qualquer guia.`);
+  $('#ex-resumo').textContent = prontos ? `${prontos} guia(s) prontas para enviar nesta rodada.` : 'Nenhuma guia pendente nesta rodada.';
+  $('#btn-exec-claude').classList.toggle('desligado', !prontos);
   const doc = (id) => { const d = state.docs.find((x) => x.id === id); return d ? `<a href="#" onclick="abrirDoc('${d.id}');return false">${d.tipo === 'pedido' ? 'Pedido' : 'Relatório'}</a>` : ''; };
   $('#tbl-itens tbody').innerHTML = itensAtuais.map((i) => {
     const [rot, cls] = STATUS[i.status] || [i.status, 'b-info'];
@@ -626,7 +631,7 @@ async function renderPainel() {
       <td><button class="btn small" data-sessoes>${i.sessoes_realizadas}${i.qtde_autorizada != null ? ' / ' + i.qtde_autorizada : ''}</button></td>
       <td>${i.feito_por ? `<span class="badge ${i.feito_por === 'Claude (IA)' ? 'ia' : 'b-info'}">${esc(i.feito_por)}</span>` : ''}</td>
       <td class="muted">${esc(i.aprovado_por || '')}</td>
-      <td><button class="btn small" data-xml>XML</button> <button class="btn small primary" data-enviar ${i.status === 'pendente' ? '' : 'disabled'}>${ligado ? 'Enviar' : 'Enviar pelo Claude'}</button></td></tr>`;
+      <td><button class="btn small" data-xml>XML</button>${ligado ? ` <button class="btn small primary" data-enviar ${i.status === 'pendente' ? '' : 'disabled'}>Enviar</button>` : ''}</td></tr>`;
   }).join('') || '<tr><td colspan="13" class="muted">Rodada vazia.</td></tr>';
 
   $$('#tbl-itens tr[data-id]').forEach((tr) => {
@@ -648,14 +653,8 @@ async function renderPainel() {
     });
     $('[data-sessoes]', tr).addEventListener('click', () => abrirSessoes(itensAtuais.find((x) => x.id === id)));
     $('[data-xml]', tr).addEventListener('click', () => chamarTiss(id, true));
-    $('[data-enviar]', tr).addEventListener('click', async () => {
+    $('[data-enviar]', tr)?.addEventListener('click', async () => {
       const it = itensAtuais.find((x) => x.id === id);
-      if (!ligado) {
-        const cmd = $('#cmd-claude').textContent;
-        try { await navigator.clipboard.writeText(cmd); toast('Comando copiado. Cole na conversa com o Claude para ele preencher no portal.'); }
-        catch { prompt('Copie e cole na conversa com o Claude:', cmd); }
-        return;
-      }
       if (confirm(`Enviar a solicitação de ${it.paciente.nome} (${it.qtde} sessão(ões)) para a SulAmérica pelo webservice?`)) chamarTiss(id, false);
     });
   });
@@ -690,6 +689,22 @@ $('#btn-csv').addEventListener('click', () => {
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: `rodada-${$('#sel-rodada').value.slice(0, 8)}.csv` });
   a.click();
 });
+
+/* ---------------- EXECUTAR NO CLAUDE ---------------- */
+// Abre uma conversa nova no claude.ai (conta do próprio usuário) com o comando já escrito.
+const siteUrl = () => location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/$/, '');
+function definirComando(codeSel, linkSel, texto) {
+  $(codeSel).textContent = texto;
+  $(linkSel).href = 'https://claude.ai/new?q=' + encodeURIComponent(texto);
+}
+async function copiar(sel) {
+  const t = $(sel).textContent;
+  try { await navigator.clipboard.writeText(t); toast('Comando copiado. Cole numa conversa com o Claude.'); }
+  catch { prompt('Copie e cole na conversa com o Claude:', t); }
+}
+$('#btn-copiar-cmd').addEventListener('click', () => copiar('#cmd-claude'));
+$('#btn-copiar-acomp').addEventListener('click', () => copiar('#cmd-acomp'));
+$('#btn-exec-claude').addEventListener('click', (e) => { if (e.currentTarget.classList.contains('desligado')) { e.preventDefault(); toast('Não há guias pendentes nesta rodada.', true); } else log('abriu_claude', { rodada: $('#sel-rodada').value }); });
 
 /* ---------------- SESSÕES REALIZADAS ---------------- */
 let itemSessoes = null;
@@ -750,7 +765,8 @@ function renderAcomp() {
     <div class="kpi"><b>${n('autorizada') + n('parcial')}</b><span class="muted">autorizadas</span></div>
     <div class="kpi"><b>${vencendo}</b><span class="muted">senhas vencendo (7 dias)</span></div>
     <div class="kpi"><b>${n('negada')}</b><span class="muted">negadas</span></div>`;
-  $('#cmd-acomp').textContent = `Verifique as guias em análise da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${location.origin})`;
+  definirComando('#cmd-acomp', '#btn-acomp-claude',
+    `Use a skill SP/SADT Sulamerica. Verifique as guias em análise da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${siteUrl()}). Só consulte e atualize; não envie nem confirme guia nova.`);
   $('#tbl-acomp tbody').innerHTML = linhas.slice(0, 500).map(([i, av]) => {
     const [rot, cls] = STATUS[i.status] || [i.status, 'b-info'];
     const p = pac[i.paciente_id] || {};

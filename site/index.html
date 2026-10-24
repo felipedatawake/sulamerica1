@@ -122,9 +122,21 @@
           <div class="table-wrap"><table id="tbl-itens"><thead><tr>
             <th>Paciente</th><th>Proc.</th><th>Pedidas</th><th>Autoriz.</th><th>Anexos</th><th>Status</th><th>Nº guia</th><th>Senha</th><th>Validade senha</th><th>Sessões feitas</th><th>Feito por</th><th>Aprovado por</th><th>Ações</th>
           </tr></thead><tbody></tbody></table></div>
-          <div class="callout">
-            <b>Como executar a rodada:</b> envio automático pelo webservice TISS (quando configurado) com o botão <b>Enviar</b> de cada linha, ou pelo Claude:
-            diga <code id="cmd-claude">Rode a rodada …</code> na conversa com a skill SP/SADT Sulamerica.
+          <div class="executar">
+            <div class="ex-texto">
+              <b>Executar com o Claude</b>
+              <span class="muted" id="ex-resumo">—</span>
+              <ol class="ex-passos">
+                <li>Abra o Chrome com a extensão do Claude ligada.</li>
+                <li>Clique em <b>Executar no Claude</b>: abre uma conversa na sua conta com a rodada pronta.</li>
+                <li>O Claude manda a tabela de conferência; você aprova e faz o login no portal quando ele pedir.</li>
+              </ol>
+            </div>
+            <div class="ex-botoes">
+              <a class="btn primary" id="btn-exec-claude" target="_blank" rel="noopener">Executar no Claude ↗</a>
+              <button class="btn small ghost" id="btn-copiar-cmd" type="button">Copiar comando</button>
+            </div>
+            <code id="cmd-claude" class="hidden"></code>
           </div>
         </div>
       </div>
@@ -142,7 +154,15 @@
           <div class="table-wrap"><table id="tbl-acomp"><thead><tr>
             <th>Paciente</th><th>Rodada</th><th>Status</th><th>Nº guia / senha</th><th>Validade</th><th>Sessões</th><th>O que fazer</th><th></th>
           </tr></thead><tbody></tbody></table></div>
-          <div class="callout"><b>Reconsultar no portal pelo Claude:</b> diga <code id="cmd-acomp">Verifique as guias em análise…</code> na conversa com a skill SP/SADT Sulamerica. Ele consulta cada guia no portal e atualiza status, senha, validade e quantidade autorizada.</div>
+          <div class="executar">
+            <div class="ex-texto"><b>Reconsultar no portal com o Claude</b>
+              <span class="muted">Ele consulta cada guia em análise no portal e atualiza status, senha, validade e quantidade autorizada. Não envia nada novo.</span></div>
+            <div class="ex-botoes">
+              <a class="btn primary" id="btn-acomp-claude" target="_blank" rel="noopener">Verificar no Claude ↗</a>
+              <button class="btn small ghost" id="btn-copiar-acomp" type="button">Copiar comando</button>
+            </div>
+            <code id="cmd-acomp" class="hidden"></code>
+          </div>
         </div>
       </div>
 
