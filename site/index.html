@@ -278,13 +278,13 @@
     <p class="muted" id="ses-resumo"></p>
     <form id="form-sessao" class="head-actions" style="margin-bottom:10px">
       <label class="inline">Data <input type="date" name="data" required></label>
-      <label class="inline">Início <input type="time" name="hora_inicio"></label>
-      <label class="inline">Fim <input type="time" name="hora_fim"></label>
+      <label class="inline" title="Opcional: não vai para o portal da SulAmérica">Início <span class="muted">(opcional)</span> <input type="time" name="hora_inicio"></label>
+      <label class="inline" title="Opcional: não vai para o portal da SulAmérica">Fim <span class="muted">(opcional)</span> <input type="time" name="hora_fim"></label>
       <label class="inline"><input type="checkbox" name="assinada"> Paciente assinou</label>
       <button class="btn primary small" type="submit">Registrar sessão</button>
     </form>
     <div class="table-wrap"><table id="tbl-sessoes"><thead><tr><th>#</th><th>Data</th><th>Horário</th><th>Assinada</th><th>Registrado por</th><th></th></tr></thead><tbody></tbody></table></div>
-    <div class="footer-actions"><span class="muted">Cada sessão precisa da assinatura do paciente (campo 57 da guia) para faturar.</span><button class="btn" id="ses-fechar">Fechar</button></div>
+    <div class="footer-actions"><span class="muted">Para faturar, cada sessão precisa da data e da assinatura do paciente (campos 56 e 57 da guia). O horário é opcional e serve só para o controle da clínica.</span><button class="btn" id="ses-fechar">Fechar</button></div>
   </dialog>
 
   <!-- MODAL de prévia da planilha -->
