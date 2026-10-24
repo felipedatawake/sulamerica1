@@ -136,3 +136,5 @@ dialog.ajuda{width:min(760px,96vw)}
 .ajuda-passos{padding-left:22px;display:grid;gap:10px;margin:12px 0}
 .ajuda-passos li{line-height:1.5}
 .ajuda-lista{padding-left:20px;display:grid;gap:6px;margin:6px 0 12px}
+.ex-aprova{margin-top:8px;font-weight:600;font-size:13px;align-items:flex-start}
+.ex-aprova input{margin-top:2px}

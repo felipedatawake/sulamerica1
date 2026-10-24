@@ -561,6 +561,9 @@ $('#chk-todos').addEventListener('change', (e) => {
 });
 $('#btn-criar-rodada').addEventListener('click', async () => {
   const [codigo, desc] = $('#rodada-proc').value.split('|');
+  if (!$('#rodada-data').value) return toast('Informe a data do atendimento da rodada.', true);
+  const qRuim = [...selecao.values()].filter((q) => !(q >= 1 && q <= 99)).length;
+  if (qRuim) return toast(`${qRuim} paciente(s) com quantidade de sessões inválida (use de 1 a 99).`, true);
   const confs = new Map([...selecao.entries()].map(([pid, q]) => [pid, conferirPac(state.pacientes.find((p) => p.id === pid), q)]));
   const comErro = [...confs.values()].filter((c) => !c.ok).length;
   if (comErro && !confirm(`${comErro} paciente(s) têm erro na conferência (dados ou anexos faltando). Eles entram na rodada como "não enviada", com o motivo. Continuar?`)) return;
@@ -615,9 +618,9 @@ async function renderPainel() {
     <div class="kpi"><b>${cont('nao_enviada') + cont('erro') + cont('negada')}</b><span class="muted">com problema</span></div>
     <div class="kpi"><b>${ia}</b><span class="muted">feitas pelo Claude</span></div>`;
   const prontos = itensAtuais.filter((i) => i.status === 'pendente').length;
-  definirComando('#cmd-claude', '#btn-exec-claude',
-    `Use a skill SP/SADT Sulamerica. Rode a rodada ${rid} da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${siteUrl()}). ` +
-    `Primeiro me mande a tabela de conferência das ${prontos} guia(s) pendente(s) e espere minha aprovação antes de validar qualquer guia.`);
+  if (rodadaAtual?.rid !== rid) $('#ex-aprovo').checked = false;
+  rodadaAtual = { rid, prontos, data: state.rodadas.find((r) => r.id === rid)?.data };
+  atualizaComandoRodada();
   $('#ex-resumo').textContent = prontos ? `${prontos} guia(s) prontas para enviar nesta rodada.` : 'Nenhuma guia pendente nesta rodada.';
   $('#btn-exec-claude').classList.toggle('desligado', !prontos);
   const doc = (id) => { const d = state.docs.find((x) => x.id === id); return d ? `<a href="#" onclick="abrirDoc('${d.id}');return false">${d.tipo === 'pedido' ? 'Pedido' : 'Relatório'}</a>` : ''; };
@@ -711,9 +714,30 @@ async function copiar(sel) {
   try { await navigator.clipboard.writeText(t); toast('Comando copiado. Cole numa conversa com o Claude.'); }
   catch { prompt('Copie e cole na conversa com o Claude:', t); }
 }
+let rodadaAtual = null;
+function atualizaComandoRodada() {
+  if (!rodadaAtual) return;
+  const { rid, prontos, data } = rodadaAtual, aprovado = $('#ex-aprovo').checked;
+  const base = `Use a skill SP/SADT Sulamerica. Rode a rodada ${rid} da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${siteUrl()}). ` +
+    `Quantidade de sessões, procedimento e data do atendimento (${dataBr(data)}) já estão na rodada: use esses dados e não me pergunte. `;
+  definirComando('#cmd-claude', '#btn-exec-claude', base + (aprovado
+    ? `Já conferi no site e APROVO o envio das ${prontos} guia(s) pendente(s) exatamente como estão no Painel: pode preencher, validar e confirmar cada uma sem me pedir aprovação de novo. Me mostre a tabela de conferência só como registro. Pule e me avise qualquer guia com erro na conferência ou em que o portal mostre algo diferente.`
+    : `Me mande a tabela de conferência das ${prontos} guia(s) pendente(s) e espere minha aprovação antes de validar.`));
+  $('#btn-exec-claude').textContent = aprovado ? 'Executar no Claude (aprovado) ↗' : 'Executar no Claude ↗';
+}
+$('#ex-aprovo').addEventListener('change', atualizaComandoRodada);
 $('#btn-copiar-cmd').addEventListener('click', () => copiar('#cmd-claude'));
 $('#btn-copiar-acomp').addEventListener('click', () => copiar('#cmd-acomp'));
-$('#btn-exec-claude').addEventListener('click', (e) => { if (e.currentTarget.classList.contains('desligado')) { e.preventDefault(); toast('Não há guias pendentes nesta rodada.', true); } else log('abriu_claude', { rodada: $('#sel-rodada').value }); });
+$('#btn-exec-claude').addEventListener('click', (e) => {
+  if (e.currentTarget.classList.contains('desligado')) { e.preventDefault(); toast('Não há guias pendentes nesta rodada.', true); return; }
+  const rid = $('#sel-rodada').value, aprovado = $('#ex-aprovo').checked;
+  if (aprovado) {
+    // registra quem aprovou e quando, nas guias pendentes desta rodada
+    comSessao(() => sb.from('sps_rodada_itens').update({ aprovado_por: state.user.email }).eq('rodada_id', rid).eq('status', 'pendente'))
+      .then((r) => { if (r.error) toast('Não consegui registrar a aprovação: ' + r.error.message, true); });
+  }
+  log(aprovado ? 'aprovou_rodada' : 'abriu_claude', { rodada: rid, guias: rodadaAtual?.prontos });
+});
 
 /* ---------------- SESSÕES REALIZADAS ---------------- */
 let itemSessoes = null;
