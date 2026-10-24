@@ -18,7 +18,7 @@
       <p class="muted">Acesso restrito à equipe da clínica.</p>
       <form id="form-login">
         <label>E-mail<input type="email" id="login-email" required autocomplete="username"></label>
-        <label>Senha<input type="password" id="login-senha" required minlength="8" autocomplete="current-password"></label>
+        <label>Senha<span class="senha-wrap"><input type="password" id="login-senha" required minlength="8" autocomplete="current-password"><button type="button" class="olho" id="btn-ver-senha" aria-label="Mostrar senha" title="Mostrar senha">👁</button></span></label>
         <button class="btn primary" type="submit">Entrar</button>
         <button class="btn ghost" type="button" id="btn-criar-conta">Criar minha senha (primeiro acesso)</button>
       </form>

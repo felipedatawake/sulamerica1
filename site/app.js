@@ -134,6 +134,13 @@ $('#form-login').addEventListener('submit', async (e) => {
   if (error) { msg.className = 'msg err'; msg.textContent = error.message.includes('confirm') ? 'E-mail ainda não autorizado. Peça acesso ao administrador.' : 'E-mail ou senha incorretos.'; return; }
   entrar(data.user);
 });
+$('#btn-ver-senha').addEventListener('click', () => {
+  const i = $('#login-senha'), b = $('#btn-ver-senha'), ver = i.type === 'password';
+  i.type = ver ? 'text' : 'password';
+  b.classList.toggle('on', ver);
+  b.setAttribute('aria-label', ver ? 'Esconder senha' : 'Mostrar senha'); b.title = b.getAttribute('aria-label');
+  i.focus();
+});
 $('#btn-criar-conta').addEventListener('click', async () => {
   const email = $('#login-email').value.trim(), senha = $('#login-senha').value, msg = $('#login-msg');
   if (!email || senha.length < 8) { msg.className = 'msg err'; msg.textContent = 'Informe o e-mail autorizado e uma senha com 8+ caracteres.'; return; }

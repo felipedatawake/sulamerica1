@@ -110,3 +110,7 @@ tr.dup td{opacity:.55}
 .aviso-aba{position:sticky;top:0;z-index:60;background:var(--warn-bg);color:var(--warn);font-weight:600;text-align:center;padding:8px 12px;font-size:13px}
 
 .barra{height:8px;border-radius:99px;background:var(--line);margin-top:6px;overflow:hidden}.barra span{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--cyan));transition:width .2s}
+
+.senha-wrap{position:relative;display:block}.senha-wrap input{width:100%;padding-right:44px}
+.olho{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:none;cursor:pointer;font-size:17px;padding:4px 8px;border-radius:6px;opacity:.6}
+.olho:hover,.olho.on{opacity:1}.olho.on{background:var(--info-bg)}
