@@ -128,3 +128,11 @@ td input[type=date]{padding:4px 6px;font-size:12.5px}
 .ex-botoes{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 a.btn{text-decoration:none}
 a.btn.desligado{opacity:.45;cursor:not-allowed}
+
+/* ajuda */
+.ajuda-btn{width:30px;height:30px;padding:0;border-radius:50%;font-weight:700;background:var(--info-bg);color:var(--info);border:0}
+dialog.ajuda{width:min(760px,96vw)}
+.ajuda-topo{display:flex;justify-content:space-between;align-items:center}
+.ajuda-passos{padding-left:22px;display:grid;gap:10px;margin:12px 0}
+.ajuda-passos li{line-height:1.5}
+.ajuda-lista{padding-left:20px;display:grid;gap:6px;margin:6px 0 12px}

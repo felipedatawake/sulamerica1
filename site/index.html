@@ -38,7 +38,7 @@
         <button data-tab="documentos">Documentos</button>
         <button data-tab="config">Configurações</button>
       </nav>
-      <div class="user"><span id="user-email"></span><button class="btn small ghost" id="btn-sair">Sair</button></div>
+      <div class="user"><button class="btn small ajuda-btn" id="btn-ajuda" title="Ajuda: passo a passo" aria-label="Ajuda">?</button><span id="user-email"></span><button class="btn small ghost" id="btn-sair">Sair</button></div>
     </header>
 
     <main>
@@ -241,6 +241,34 @@
       <button class="btn ghost" id="dlg-cancelar">Cancelar</button>
       <button class="btn primary" id="dlg-salvar">Salvar arquivos</button>
     </div>
+  </dialog>
+
+  <!-- AJUDA -->
+  <dialog id="dlg-ajuda" class="ajuda">
+    <div class="ajuda-topo"><h2>Como funciona · passo a passo</h2><button class="btn small ghost" id="ajuda-fechar" aria-label="Fechar">✕</button></div>
+    <p class="muted">Do cadastro ao faturamento de uma guia SP/SADT de psicoterapia na SulAmérica. Quem faz cada passo está entre colchetes.</p>
+    <ol class="ajuda-passos">
+      <li><b>Importar os dados</b> [equipe] — aba <i>Rodada do dia</i>: (1) planilha de pacientes em .xlsx; (2) pedidos médicos e (3) relatórios, em arquivos ou pastas inteiras. O sistema liga cada arquivo ao paciente pelo nome. Confira em <i>Documentos</i> e informe a <b>data de emissão</b> do pedido.</li>
+      <li><b>Corrigir o que a conferência apontar</b> [equipe] — a coluna <i>Conferência</i> mostra <span class="badge b-bad">✖ erro</span> (impede o envio: carteirinha, CRM, CBO, CID, anexo faltando ou acima de 10 MB) e <span class="badge b-warn">⚠ conferir</span> (pedido antigo, guia repetida, psicólogo sem CRP). Corrija clicando no campo em <i>Pacientes</i>; use o filtro <i>Só com problema</i>.</li>
+      <li><b>Montar a rodada</b> [equipe] — marque quem é atendido, informe as sessões e clique <b>Criar rodada</b>. Quem tem erro entra como "Não enviada", com o motivo.</li>
+      <li><b>Executar no Claude</b> [equipe] — no <i>Painel</i>, com o Chrome e a extensão do Claude abertos, clique <b>Executar no Claude ↗</b>. Abre uma conversa na sua conta com o comando pronto.</li>
+      <li><b>Aprovar</b> [você] — o Claude abre este site e o portal da SulAmérica e manda a <b>tabela de conferência</b>. Responda "pode enviar todas" ou "todas menos a do fulano". Faça o <b>login no portal</b> quando ele pedir (ele nunca digita a senha).</li>
+      <li><b>Envio</b> [Claude] — preenche, anexa pedido e relatório, valida e confirma cada guia aprovada. Se o portal mostrar algo diferente do aprovado, ele não confirma aquela guia. Tudo fica marcado como <span class="badge ia">Claude (IA)</span>.</li>
+      <li><b>Acompanhar</b> [Claude + você] — aba <i>Acompanhamento</i>: guias em análise (botão <b>Verificar no Claude ↗</b> para reconsultar no portal), senhas vencendo, sessões esgotadas e negadas.</li>
+      <li><b>Registrar as sessões</b> [equipe] — botão <b>Sessões</b> da guia: data, horário e "paciente assinou" em cada atendimento. O sistema avisa sessão fora da validade da senha ou acima do autorizado.</li>
+      <li><b>Faturar</b> [equipe] — <b>Exportar CSV</b> no Painel com guia, senha, validade e sessões feitas.</li>
+    </ol>
+    <h3>Antes da primeira rodada</h3>
+    <ul class="ajuda-lista">
+      <li><i>Configurações</i>: código do prestador, CNES e regras (validade do pedido e da senha).</li>
+      <li><i>Configurações → Psicólogos executantes</i>: nome completo e CRP de cada psicólogo.</li>
+    </ul>
+    <h3>Dúvidas comuns</h3>
+    <ul class="ajuda-lista">
+      <li><b>O site saiu sozinho?</b> A sessão expirou: entre de novo, nada se perde. Use só uma aba aberta.</li>
+      <li><b>Arquivo em outro formato?</b> Imagens viram JPG automaticamente; Word e outros precisam ser salvos como PDF.</li>
+      <li><b>Guia negada?</b> O motivo fica na linha da guia. Recurso ou nova solicitação é decisão da equipe.</li>
+    </ul>
   </dialog>
 
   <!-- MODAL de sessões realizadas -->

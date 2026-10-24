@@ -177,6 +177,10 @@ async function entrar(user) {
   $('#user-email').textContent = user.email;
   $('#rodada-data').value = hoje();
   await recarregar();
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('rodada') && state.rodadas.some((r) => r.id === qs.get('rodada'))) $('#sel-rodada').value = qs.get('rodada');
+  if (qs.get('aba')) $(`.tabs button[data-tab="${CSS.escape(qs.get('aba'))}"]`)?.click();
+  if (qs.has('ajuda')) $('#dlg-ajuda').showModal();
 }
 
 /* ---------------- DATA ---------------- */
@@ -689,6 +693,11 @@ $('#btn-csv').addEventListener('click', () => {
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: `rodada-${$('#sel-rodada').value.slice(0, 8)}.csv` });
   a.click();
 });
+
+/* ---------------- AJUDA ---------------- */
+$('#btn-ajuda').addEventListener('click', () => $('#dlg-ajuda').showModal());
+$('#ajuda-fechar').addEventListener('click', () => $('#dlg-ajuda').close());
+$('#dlg-ajuda').addEventListener('click', (e) => { if (e.target.id === 'dlg-ajuda') e.target.close(); });
 
 /* ---------------- EXECUTAR NO CLAUDE ---------------- */
 // Abre uma conversa nova no claude.ai (conta do próprio usuário) com o comando já escrito.
