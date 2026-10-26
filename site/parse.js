@@ -6,7 +6,9 @@ export function norm(s) {
 }
 export const tokens = (s) => norm(s).split(' ').filter((t) => t.length >= 2 && !STOP.has(t) && !/^\d+$/.test(t));
 
-const ehCrm = (c) => /\bcrm\b/i.test(c);
+// Número do conselho do médico: "CRM;40270", "CRM 215831", "Nconselho ;168280", "CREMESP 50.025", "CRM-SP 123"
+const ehCrm = (c) => /(\bcrm|cremesp|conselho)/i.test(c);
+export const extraiCrm = (c) => (String(c ?? '').replace(/(\d)[.\s](?=\d{3}\b)/g, '$1').match(/\d{3,}/) || [''])[0];
 const ehCbo = (c) => /\bcbo/i.test(c);
 const ehCid = (c) => /\bcid\b/i.test(c);
 
@@ -37,7 +39,7 @@ export function parseAbas(abas) {
         nome: nome.replace(/\s+/g, ' ').trim().toUpperCase(),
         carteirinha: cells[iCart].replace(/\D/g, ''),
         medico: medicoCel && resto.indexOf(medicoCel) === 0 ? limpaMedico(medicoCel) : '',
-        crm: crm ? (crm.match(/\d{3,}/) || [''])[0] : '',
+        crm: crm ? extraiCrm(crm) : '',
         crm_uf: 'SP',
         cbo: cbo ? (cbo.match(/\d{6}/) || [''])[0] : '',
         cid: cid ? extraiCid(cid) : '',
