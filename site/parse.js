@@ -7,7 +7,8 @@ export function norm(s) {
 export const tokens = (s) => norm(s).split(' ').filter((t) => t.length >= 2 && !STOP.has(t) && !/^\d+$/.test(t));
 
 // Número do conselho do médico: "CRM;40270", "CRM 215831", "Nconselho ;168280", "CREMESP 50.025", "CRM-SP 123"
-const ehCrm = (c) => /(\bcrm|cremesp|conselho)/i.test(c);
+const ehCrm = (c) => /(\bc?r+m|cremesp|conselh)/i.test(c);
+const soNumero = (c) => /^\s*\d[\d.\s]{2,7}\s*$/.test(c);
 export const extraiCrm = (c) => (String(c ?? '').replace(/(\d)[.\s](?=\d{3}\b)/g, '$1').match(/\d{3,}/) || [''])[0];
 const ehCbo = (c) => /\bcbo/i.test(c);
 const ehCid = (c) => /\bcid\b/i.test(c);
@@ -34,14 +35,16 @@ export function parseAbas(abas) {
       if (!nome) continue;
       const resto = cells.slice(iCart + 1).filter(Boolean);
       const medicoCel = resto.find((c) => !ehCrm(c) && !ehCbo(c) && !ehCid(c) && /[A-Za-zÀ-ú]{3,}/.test(c));
-      const crm = resto.find(ehCrm), cbo = resto.find(ehCbo), cid = resto.find(ehCid);
+      const cbo = resto.find(ehCbo), cid = resto.find(ehCid);
+      // CRM: célula com rótulo (CRM, Nconselho, CREMESP...) ou, sem rótulo, o número logo depois do médico
+      const crm = resto.find(ehCrm) || (soNumero(resto[1] || '') ? resto[1] : '');
       const p = {
         nome: nome.replace(/\s+/g, ' ').trim().toUpperCase(),
         carteirinha: cells[iCart].replace(/\D/g, ''),
         medico: medicoCel && resto.indexOf(medicoCel) === 0 ? limpaMedico(medicoCel) : '',
         crm: crm ? extraiCrm(crm) : '',
         crm_uf: 'SP',
-        cbo: cbo ? (cbo.match(/\d{6}/) || [''])[0] : '',
+        cbo: cbo ? (cbo.replace(/\D/g, '').match(/\d{6}/) || [''])[0] : '',
         cid: cid ? extraiCid(cid) : '',
         aba_origem: aba.trim(),
       };
