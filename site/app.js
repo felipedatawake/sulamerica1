@@ -3,12 +3,17 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 import { norm, parseAbas, melhorPacienteComPasta, tipoPeloCaminho, classificaArquivo } from './parse.js';
 import { conferir, situacaoPosterior, normalizaCid } from './regras.js';
 
-const SUPABASE_URL = 'https://ypcunysgtzdgqamkygtz.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_Zl11bOWU5l3V7Nky3TNf-g_HBeFoNU8';
+import { projetoAtual, salvarProjeto, esquecerProjeto, testarProjeto, normalizaUrl, refDoUrl, linkDaEquipe } from './projeto.js';
+// Cada clínica usa o próprio projeto Supabase (ver projeto.js). O site é o mesmo para todas.
+const PROJETO = projetoAtual();
+const SUPABASE_URL = PROJETO.url;
+const SUPABASE_KEY = PROJETO.chave;
+const PROJETO_REF = refDoUrl(SUPABASE_URL);
+const AUTH_KEY = PROJETO.origem === 'padrao' || PROJETO_REF === 'ypcunysgtzdgqamkygtz' ? 'sps-auth' : 'sps-auth-' + PROJETO_REF;
 const BUCKET = 'sps-documentos';
 // Cliente só para login. A renovação é feita por um temporizador próprio, baseado na validade
 // que o servidor informa (expires_in), e não no relógio do computador, que pode estar errado.
-const sa = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'sps-auth' } });
+const sa = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, storageKey: AUTH_KEY } });
 let sessao = null, tRecebida = 0, timerRenova = null, renovando = null;
 // Cliente para dados e arquivos: usa sempre o token guardado, sem tentar renovar sozinho
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { accessToken: async () => sessao?.access_token ?? null });
@@ -96,7 +101,7 @@ sa.auth.onAuthStateChange((evento) => { if (evento === 'SIGNED_OUT' && state.use
 async function iniciar() {
   avisoOutraAba();
   let guardada = null;
-  try { guardada = JSON.parse(localStorage.getItem('sps-auth') || 'null'); } catch {}
+  try { guardada = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch {}
   if (!guardada?.refresh_token) return $('#tela-login').classList.remove('hidden');
   sessao = guardada;
   try { await renovar(); } catch { sessao = null; await sa.auth.signOut({ scope: 'local' }); return $('#tela-login').classList.remove('hidden'); }
@@ -518,6 +523,7 @@ $('#pac-so-prob').addEventListener('change', renderPacientes);
 
 /* ---------------- RODADA ---------------- */
 const selecao = new Map(); // paciente_id -> qtde
+const sessoesPadrao = () => { const v = Math.trunc(+$('#sessoes-todos').value); return v >= 1 && v <= 99 ? v : 0; };
 function renderRodada() {
   const q = norm($('#busca-rodada').value);
   const soOk = $('#rodada-so-ok').checked;
@@ -531,7 +537,7 @@ function renderRodada() {
       <td>${esc(p.medico)}<br><span class="muted">CRM ${esc(p.crm)} ${esc(p.crm_uf)} · CBO ${esc(p.cbo)}</span></td>
       <td>${esc(p.cid)}</td><td>${marca(ped)}</td><td>${marca(rel)}</td>
       <td>${badgeConf(conferirPac(p, selecao.get(p.id) || 1))}</td>
-      <td><input type="number" min="1" max="99" step="1" value="${selecao.has(p.id) ? selecao.get(p.id) : 1}" data-qtde></td></tr>`;
+      <td><input type="number" min="1" max="99" step="1" value="${selecao.has(p.id) ? selecao.get(p.id) : sessoesPadrao() || ''}" data-qtde></td></tr>`;
   }).join('') || '<tr><td colspan="9" class="muted">Nenhum paciente. Comece importando a planilha (passo 1).</td></tr>';
   $$('#tbl-rodada tbody tr[data-id]').forEach((tr) => {
     const id = tr.dataset.id, chk = $('[data-sel]', tr), qt = $('[data-qtde]', tr);
@@ -557,6 +563,14 @@ function resumoRodada() {
 }
 $('#busca-rodada').addEventListener('input', renderRodada);
 $('#rodada-so-ok').addEventListener('change', renderRodada);
+// Sessões para todos: aplica o mesmo número a todos os pacientes (marcados e os que forem marcados depois)
+$('#sessoes-todos').addEventListener('input', () => {
+  const v = sessoesPadrao();
+  $('#sessoes-todos').classList.toggle('qt-ruim', !v);
+  for (const id of selecao.keys()) selecao.set(id, v);
+  $$('#tbl-rodada tbody tr[data-id] [data-qtde]').forEach((q) => { q.value = v || ''; q.classList.toggle('qt-ruim', $('[data-sel]', q.closest('tr')).checked && !v); });
+  resumoRodada();
+});
 $('#chk-todos').addEventListener('change', (e) => {
   $$('#tbl-rodada tbody tr[data-id]').forEach((tr) => {
     $('[data-sel]', tr).checked = e.target.checked;
@@ -610,7 +624,7 @@ async function funcaoServidorExiste() {
 async function statusTiss() { if (tissLigado === null) { try { tissLigado = !!(await (await fetch('/api/tiss')).json()).configurado; } catch { tissLigado = false; } } return tissLigado; }
 async function renderPainel() {
   const rid = $('#sel-rodada').value;
-  if (!rid) { $('#tbl-itens tbody').innerHTML = '<tr><td colspan="13" class="muted">Crie uma rodada na aba Rodada do dia.</td></tr>'; $('#rodada-info').innerHTML = ''; return; }
+  if (!rid) { $('#tbl-itens tbody').innerHTML = '<tr><td colspan="11" class="muted">Crie uma rodada na aba Rodada do dia.</td></tr>'; $('#rodada-info').innerHTML = ''; return; }
   const { data, error } = await sb.from('sps_rodada_itens').select('*, paciente:sps_pacientes(*), sessoes:sps_sessoes(count)').eq('rodada_id', rid);
   if (error) return toast(error.message, true);
   itensAtuais = (data || []).map((i) => ({ ...i, sessoes_realizadas: i.sessoes?.[0]?.count ?? 0 })).sort((a, b) => a.paciente.nome.localeCompare(b.paciente.nome));
@@ -639,12 +653,10 @@ async function renderPainel() {
       <td><select data-status>${Object.entries(STATUS).map(([k, [r]]) => `<option value="${k}" ${k === i.status ? 'selected' : ''}>${r}</option>`).join('')}</select> <span class="badge ${cls}">${rot}</span></td>
       <td contenteditable data-c="numero_guia">${esc(i.numero_guia)}</td>
       <td contenteditable data-c="senha">${esc(i.senha)}</td>
-      <td><input type="date" data-validade value="${i.senha_validade || ''}"></td>
-      <td><button class="btn small" data-sessoes>${i.sessoes_realizadas}${i.qtde_autorizada != null ? ' / ' + i.qtde_autorizada : ''}</button></td>
       <td>${i.feito_por ? `<span class="badge ${i.feito_por === 'Claude (IA)' ? 'ia' : 'b-info'}">${esc(i.feito_por)}</span>` : ''}</td>
       <td class="muted">${esc(i.aprovado_por || '')}</td>
       <td><button class="btn small" data-xml>XML</button>${ligado ? ` <button class="btn small primary" data-enviar ${i.status === 'pendente' ? '' : 'disabled'}>Enviar</button>` : ''}</td></tr>`;
-  }).join('') || '<tr><td colspan="13" class="muted">Rodada vazia.</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="muted">Rodada vazia.</td></tr>';
 
   $$('#tbl-itens tr[data-id]').forEach((tr) => {
     const id = tr.dataset.id;
@@ -659,11 +671,11 @@ async function renderPainel() {
       const { error } = await sb.from('sps_rodada_itens').update({ [td.dataset.c]: v, ...marcarHumano }).eq('id', id);
       if (error) toast(error.message, true);
     }));
-    $('[data-validade]', tr).addEventListener('change', async (e) => {
+    $('[data-validade]', tr)?.addEventListener('change', async (e) => {
       const { error } = await sb.from('sps_rodada_itens').update({ senha_validade: e.target.value || null, ...marcarHumano }).eq('id', id);
       if (error) toast(error.message, true); else toast('Validade salva.');
     });
-    $('[data-sessoes]', tr).addEventListener('click', () => abrirSessoes(itensAtuais.find((x) => x.id === id)));
+    $('[data-sessoes]', tr)?.addEventListener('click', () => abrirSessoes(itensAtuais.find((x) => x.id === id)));
     $('[data-xml]', tr).addEventListener('click', () => chamarTiss(id, true));
     $('[data-enviar]', tr)?.addEventListener('click', async () => {
       const it = itensAtuais.find((x) => x.id === id);
@@ -702,6 +714,62 @@ $('#btn-csv').addEventListener('click', () => {
   a.click();
 });
 
+$('#form-membro').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('#mb-email').value.trim().toLowerCase();
+  const { error } = await comSessao(() => sb.from('sps_membros').upsert({ email, nome: $('#mb-nome').value.trim() || null, papel: $('#mb-papel').value }));
+  if (error) return toast(error.message, true);
+  await log('adicionou_membro', { email, papel: $('#mb-papel').value });
+  e.target.reset(); toast(`Acesso liberado para ${email}. A pessoa cria a senha em "Criar minha senha (primeiro acesso)".`); renderConfig();
+});
+
+/* ---------------- CLÍNICA (multiclínica) ---------------- */
+const nomeClinica = () => PROJETO.nome || PROJETO_REF;
+$('#login-clinica').textContent = nomeClinica();
+let cliTeste = null, sqlBase = null;
+function abrirClinica() {
+  $('#cli-url').value = PROJETO.origem === 'padrao' ? '' : SUPABASE_URL; $('#cli-chave').value = ''; $('#cli-nome').value = '';
+  $('#cli-status').textContent = ''; $('#cli-conectar').disabled = true; $('#cli-passo-instalar').classList.add('hidden');
+  $('#dlg-clinica').showModal();
+}
+$('#btn-trocar-clinica').addEventListener('click', (e) => { e.preventDefault(); abrirClinica(); });
+$('#btn-trocar-clinica2').addEventListener('click', abrirClinica);
+$('#cli-fechar').addEventListener('click', () => $('#dlg-clinica').close());
+$('#cli-testar').addEventListener('click', async () => {
+  const url = normalizaUrl($('#cli-url').value), chave = $('#cli-chave').value.trim(), st = $('#cli-status');
+  if (/service_role|sb_secret_/i.test(chave)) { st.className = 'msg err'; st.textContent = 'Essa é a chave SECRETA. Use a chave publicável (sb_publishable_...).'; return; }
+  if (!url || !chave) { st.className = 'msg err'; st.textContent = 'Preencha a URL do projeto e a chave publicável.'; return; }
+  st.className = 'msg'; st.textContent = 'Testando…';
+  const r = await testarProjeto(url, chave);
+  cliTeste = r.ok ? { url, chave } : null;
+  if (!r.ok) { st.className = 'msg err'; st.textContent = r.motivo === 'chave' ? 'Chave inválida para esse projeto.' : 'Não encontrei esse projeto. Confira a URL.'; $('#cli-conectar').disabled = true; return; }
+  $('#cli-abrir-sql').href = `https://supabase.com/dashboard/project/${refDoUrl(url)}/sql/new`;
+  $('#cli-passo-instalar').classList.toggle('hidden', r.instalado);
+  $('#cli-conectar').disabled = !r.instalado;
+  st.className = 'msg ' + (r.instalado ? 'ok' : 'err');
+  st.textContent = r.instalado ? 'Conectado: o banco da plataforma já está instalado nesse projeto.' : 'Projeto encontrado, mas o banco da plataforma ainda não foi instalado. Faça o passo 3.';
+});
+$('#cli-copiar-sql').addEventListener('click', async () => {
+  const email = $('#cli-email').value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Informe o seu e-mail para ser o administrador.', true);
+  if (!sqlBase) sqlBase = await (await fetch('instalar.sql', { cache: 'no-store' })).text();
+  const q = (v) => String(v || '').replace(/'/g, "''");
+  const sql = sqlBase.replace('{{EMAIL_ADMIN}}', q(email)).replace('{{NOME_ADMIN}}', q($('#cli-admin-nome').value.trim()))
+    .replace('{{CODIGO_PRESTADOR}}', q($('#cli-codigo').value.trim())).replace('{{CNES}}', q($('#cli-cnes').value.trim()))
+    .replace('{{NOME_CLINICA}}', q($('#cli-nome').value.trim().toUpperCase()));
+  try { await navigator.clipboard.writeText(sql); toast('Instalador copiado. Agora abra o SQL Editor, cole e clique em Run.'); }
+  catch { const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([sql], { type: 'text/plain' })), download: 'instalar-sp-sadt.sql' }); a.click(); toast('Baixei o instalador (instalar-sp-sadt.sql). Abra, copie tudo e cole no SQL Editor.'); }
+});
+$('#cli-conectar').addEventListener('click', () => {
+  if (!cliTeste) return;
+  salvarProjeto({ ...cliTeste, nome: $('#cli-nome').value.trim() || null });
+  location.href = location.pathname; // recarrega já na clínica nova
+});
+$('#btn-link-equipe').addEventListener('click', async () => {
+  const link = linkDaEquipe({ url: SUPABASE_URL, chave: SUPABASE_KEY, nome: PROJETO.nome });
+  try { await navigator.clipboard.writeText(link); toast('Link copiado. Mande para a equipe da clínica.'); } catch { prompt('Copie o link:', link); }
+});
+
 /* ---------------- AJUDA ---------------- */
 $('#btn-ajuda').addEventListener('click', () => $('#dlg-ajuda').showModal());
 $('#ajuda-fechar').addEventListener('click', () => $('#dlg-ajuda').close());
@@ -723,7 +791,7 @@ let rodadaAtual = null;
 function atualizaComandoRodada() {
   if (!rodadaAtual) return;
   const { rid, prontos, data } = rodadaAtual, aprovado = $('#ex-aprovo').checked;
-  const base = `Use a skill SP/SADT Sulamerica. Rode a rodada ${rid} da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${siteUrl()}). ` +
+  const base = `Use a skill SP/SADT Sulamerica. Rode a rodada ${rid} da plataforma SP/SADT (Supabase ${PROJETO_REF}, site ${siteUrl()}). ` +
     `Quantidade de sessões, procedimento e data do atendimento (${dataBr(data)}) já estão na rodada: use esses dados e não me pergunte. `;
   definirComando('#cmd-claude', '#btn-exec-claude', base + (aprovado
     ? `Já conferi no site e APROVO o envio das ${prontos} guia(s) pendente(s) exatamente como estão no Painel: pode preencher, validar e confirmar cada uma sem me pedir aprovação de novo. Me mostre a tabela de conferência só como registro. Pule e me avise qualquer guia com erro na conferência ou em que o portal mostre algo diferente.`
@@ -804,7 +872,7 @@ function renderAcomp() {
     <div class="kpi"><b>${vencendo}</b><span class="muted">senhas vencendo (7 dias)</span></div>
     <div class="kpi"><b>${n('negada')}</b><span class="muted">negadas</span></div>`;
   definirComando('#cmd-acomp', '#btn-acomp-claude',
-    `Use a skill SP/SADT Sulamerica. Verifique as guias em análise da plataforma SP/SADT (Supabase ypcunysgtzdgqamkygtz, site ${siteUrl()}). Só consulte e atualize; não envie nem confirme guia nova.`);
+    `Use a skill SP/SADT Sulamerica. Verifique as guias em análise da plataforma SP/SADT (Supabase ${PROJETO_REF}, site ${siteUrl()}). Só consulte e atualize; não envie nem confirme guia nova.`);
   $('#tbl-acomp tbody').innerHTML = linhas.slice(0, 500).map(([i, av]) => {
     const [rot, cls] = STATUS[i.status] || [i.status, 'b-info'];
     const p = pac[i.paciente_id] || {};
@@ -839,8 +907,17 @@ async function renderConfig() {
     if (error) return toast(error.message, true);
     x[c] = v || null; td.classList.toggle('cel-ruim', c === 'numero_conselho' && !v); toast('Salvo.');
   }));
+  $('#cfg-projeto').textContent = `${nomeClinica()} (${PROJETO_REF})`;
   const m = await sb.from('sps_membros').select('email,nome,papel').order('email');
-  $('#lista-membros').innerHTML = (m.data || []).map((x) => `<li>${esc(x.nome || '')} &lt;${esc(x.email)}&gt; · ${esc(x.papel)}</li>`).join('');
+  const souAdmin = (m.data || []).some((x) => x.email.toLowerCase() === (state.user?.email || '').toLowerCase() && x.papel === 'admin');
+  $('#form-membro').classList.toggle('hidden', !souAdmin);
+  $('#lista-membros').innerHTML = (m.data || []).map((x) => `<li>${esc(x.nome || '')} &lt;${esc(x.email)}&gt; · ${x.papel === 'admin' ? 'administrador' : 'operador'}${souAdmin && x.email.toLowerCase() !== state.user.email.toLowerCase() ? ` <button class="btn small ghost" type="button" data-rm-membro="${esc(x.email)}">Remover</button>` : ''}</li>`).join('');
+  $$('[data-rm-membro]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(`Tirar o acesso de ${b.dataset.rmMembro}?`)) return;
+    const { error } = await comSessao(() => sb.from('sps_membros').delete().eq('email', b.dataset.rmMembro));
+    if (error) return toast(error.message, true);
+    await log('removeu_membro', { email: b.dataset.rmMembro }); renderConfig();
+  }));
   try {
     if (!(await funcaoServidorExiste())) { $('#tiss-status').innerHTML = '<span class="badge b-warn">Envio automático indisponível nesta hospedagem</span> o botão XML gera o arquivo no navegador.'; return; }
     const r = await fetch('/api/tiss', { method: 'GET' });
@@ -853,6 +930,7 @@ $('#form-config').addEventListener('submit', async (e) => {
   const dados = Object.fromEntries(new FormData(e.target));
   for (const k of ['validade_pedido_dias', 'validade_senha_dias', 'dias_reverificar']) dados[k] = dados[k] ? +dados[k] : null;
   dados.exigir_relatorio = dados.exigir_relatorio !== 'false';
+  dados.imprimir_guia = dados.imprimir_guia !== 'false';
   const { error } = await sb.from('sps_config').update(dados).eq('id', 1);
   $('#config-msg').className = 'msg ' + (error ? 'err' : 'ok');
   $('#config-msg').textContent = error ? error.message : 'Salvo.';

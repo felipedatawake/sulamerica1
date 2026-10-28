@@ -23,6 +23,7 @@
         <button class="btn ghost" type="button" id="btn-criar-conta">Criar minha senha (primeiro acesso)</button>
       </form>
       <p id="login-msg" class="msg"></p>
+      <div class="clinica-atual"><span class="muted">Clínica:</span> <b id="login-clinica">—</b> · <a href="#" id="btn-trocar-clinica">usar outra clínica ou instalar uma nova</a></div>
     </div>
   </section>
 
@@ -84,7 +85,7 @@
           <div class="card-head">
             <div>
               <h2>4 · Quem é atendido hoje</h2>
-              <p class="muted">Marque os pacientes e informe a quantidade de sessões.</p>
+              <p class="muted">Informe as sessões uma vez em <b>Sessões para todos</b> e marque os pacientes. Se precisar, ajuste um paciente na última coluna.</p>
             </div>
             <div class="head-actions">
               <label class="inline">Data <input type="date" id="rodada-data"></label>
@@ -94,6 +95,7 @@
                   <option value="50001221|CONSULTA AMBULATORIAL EM PSICOLOGIA">50001221 · Consulta em psicologia</option>
                 </select>
               </label>
+              <label class="inline destaque">Sessões para todos <input type="number" id="sessoes-todos" min="1" max="99" step="1" value="1" style="width:70px"></label>
               <label class="inline"><input type="checkbox" id="rodada-so-ok"> Só prontos para enviar</label>
               <input type="search" id="busca-rodada" placeholder="Buscar paciente…">
             </div>
@@ -120,7 +122,7 @@
           </div>
           <div id="rodada-info" class="kpis"></div>
           <div class="table-wrap"><table id="tbl-itens"><thead><tr>
-            <th>Paciente</th><th>Proc.</th><th>Pedidas</th><th>Autoriz.</th><th>Anexos</th><th>Status</th><th>Nº guia</th><th>Senha</th><th>Validade senha</th><th>Sessões feitas</th><th>Feito por</th><th>Aprovado por</th><th>Ações</th>
+            <th>Paciente</th><th>Proc.</th><th>Pedidas</th><th>Autoriz.</th><th>Anexos</th><th>Status</th><th>Nº guia</th><th>Senha</th><th>Feito por</th><th>Aprovado por</th><th>Ações</th>
           </tr></thead><tbody></tbody></table></div>
           <div class="executar">
             <div class="ex-texto">
@@ -209,8 +211,19 @@
             <label>Validade padrão da senha (dias)<input name="validade_senha_dias" type="number" min="1"></label>
             <label>Reconsultar "em análise" após (dias)<input name="dias_reverificar" type="number" min="1"></label>
             <label>Relatório obrigatório<select name="exigir_relatorio"><option value="true">Sim</option><option value="false">Não</option></select></label>
+            <label>Imprimir a guia logo após confirmar<select name="imprimir_guia"><option value="true">Sim, na impressora do Chrome</option><option value="false">Não</option></select></label>
             <div class="full"><button class="btn primary" type="submit">Salvar</button> <span id="config-msg" class="msg"></span></div>
           </form>
+        </div>
+        <div class="card narrow">
+          <h2>Clínica conectada</h2>
+          <p class="muted">Cada clínica usa o próprio banco (projeto Supabase). Os dados ficam no Supabase da clínica, não no de outras.</p>
+          <p>Projeto: <b id="cfg-projeto">—</b></p>
+          <div class="btn-row" style="max-width:520px">
+            <button class="btn" type="button" id="btn-link-equipe">Copiar link para a equipe</button>
+            <button class="btn ghost" type="button" id="btn-trocar-clinica2">Trocar de clínica</button>
+          </div>
+          <p class="muted" style="margin-top:8px">O link já abre o site conectado nesta clínica. Cada pessoa da equipe precisa estar em <b>Equipe com acesso</b> e criar a senha no primeiro acesso.</p>
         </div>
         <div class="card">
           <h2>Psicólogos executantes</h2>
@@ -224,7 +237,14 @@
         </div>
         <div class="card narrow">
           <h2>Equipe com acesso</h2>
+          <p class="muted">Só quem está nesta lista consegue entrar. A pessoa cria a própria senha no primeiro acesso.</p>
           <ul id="lista-membros" class="list"></ul>
+          <form id="form-membro" class="head-actions hidden" style="margin-top:8px">
+            <input type="email" id="mb-email" placeholder="email@clinica.com" required>
+            <input id="mb-nome" placeholder="Nome">
+            <select id="mb-papel"><option value="operador">Operador</option><option value="admin">Administrador</option></select>
+            <button class="btn small primary" type="submit">Adicionar</button>
+          </form>
         </div>
       </div>
     </main>
@@ -242,6 +262,38 @@
       <button class="btn ghost" id="dlg-cancelar">Cancelar</button>
       <button class="btn primary" id="dlg-salvar">Salvar arquivos</button>
     </div>
+  </dialog>
+
+  <!-- CLÍNICA: conectar ou instalar -->
+  <dialog id="dlg-clinica" class="ajuda">
+    <div class="ajuda-topo"><h2>Conectar a clínica</h2><button class="btn small ghost" id="cli-fechar" aria-label="Fechar">✕</button></div>
+    <p class="muted">Cada clínica tem o próprio banco de dados gratuito no Supabase. Para uma clínica nova, siga os passos; para uma que já usa a plataforma, basta o passo 2.</p>
+    <ol class="ajuda-passos">
+      <li><b>Crie o projeto da clínica</b> (só na primeira vez): entre em <a href="https://supabase.com/dashboard/new" target="_blank" rel="noopener">supabase.com</a>, crie uma conta e um projeto novo (plano Free serve). Anote a senha do banco num lugar seguro.</li>
+      <li><b>Cole os dados de acesso do projeto</b> (Project Settings → API Keys / Data API):
+        <div class="grid2" style="margin-top:8px">
+          <label class="full">URL do projeto (ou o código de 20 letras)<input id="cli-url" placeholder="https://xxxxxxxxxxxxxxxxxxxx.supabase.co"></label>
+          <label class="full">Chave publicável (começa com sb_publishable_)<input id="cli-chave" placeholder="sb_publishable_..."></label>
+          <label class="full">Nome da clínica<input id="cli-nome" placeholder="Ex.: Clínica Exemplo"></label>
+        </div>
+        <button class="btn" type="button" id="cli-testar" style="margin-top:8px">Testar conexão</button> <span id="cli-status" class="msg"></span>
+      </li>
+      <li id="cli-passo-instalar" class="hidden"><b>Instale o banco da plataforma</b> (só na primeira vez):
+        <div class="grid2" style="margin-top:8px">
+          <label>Seu e-mail (administrador)<input id="cli-email" type="email"></label>
+          <label>Seu nome<input id="cli-admin-nome"></label>
+          <label>Código do prestador na operadora<input id="cli-codigo"></label>
+          <label>CNES<input id="cli-cnes"></label>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn primary" type="button" id="cli-copiar-sql">1. Copiar o instalador</button>
+          <a class="btn" id="cli-abrir-sql" target="_blank" rel="noopener">2. Abrir o SQL Editor</a>
+        </div>
+        <p class="muted" style="margin-top:6px">No SQL Editor: cole (Ctrl+V) e clique em <b>Run</b>. Depois volte aqui e clique em Testar conexão de novo.</p>
+      </li>
+      <li><b>Conecte e crie sua senha:</b> com o teste ok, clique em <button class="btn small primary" type="button" id="cli-conectar" disabled>Usar esta clínica</button>. Na tela de login, use seu e-mail e <b>Criar minha senha (primeiro acesso)</b>.</li>
+    </ol>
+    <p class="muted">A chave publicável pode ficar no navegador: o acesso aos dados é protegido por login e pela lista de e-mails autorizados. Nunca cole aqui a chave secreta (service_role).</p>
   </dialog>
 
   <!-- AJUDA -->
